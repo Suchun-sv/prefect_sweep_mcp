@@ -37,8 +37,29 @@ class HTTPPrefectAdapter:
         return data if isinstance(data, list) else []
 
     def list_workers(self) -> list[dict[str, Any]]:
-        data = self._post("/workers/filter", {})
-        return data if isinstance(data, list) else []
+        try:
+            data = self._post("/workers/filter", {})
+            return data if isinstance(data, list) else []
+        except requests.HTTPError as exc:
+            response = exc.response
+            if response is None or response.status_code != 404:
+                raise
+
+        pools = self.list_work_pools()
+        workers: list[dict[str, Any]] = []
+        for pool in pools:
+            pool_name = pool.get("name")
+            if not pool_name:
+                continue
+            data = self._post(f"/work_pools/{pool_name}/workers/filter", {})
+            if not isinstance(data, list):
+                continue
+            for worker in data:
+                if not isinstance(worker, dict):
+                    continue
+                worker.setdefault("work_pool_name", pool_name)
+                workers.append(worker)
+        return workers
 
     def create_flow_run_from_deployment(self, deployment_name: str, parameters: dict[str, Any]) -> str:
         payload = {
@@ -62,4 +83,3 @@ class HTTPPrefectAdapter:
         if not isinstance(records, list):
             return []
         return [record.get("message", "") for record in records]
-

@@ -32,8 +32,12 @@ class BatchService:
         for worker in workers:
             pool = worker.get("work_pool_name", "")
             queue = worker.get("work_queue_name", "")
+            status = str(worker.get("status", "")).upper()
             key = (pool, queue)
-            counts[key] = counts.get(key, 0) + 1
+            if status == "ONLINE":
+                counts[key] = counts.get(key, 0) + 1
+            else:
+                counts.setdefault(key, 0)
         return [
             WorkerQueueStatus(pool=pool, queue=queue, online_workers=count)
             for (pool, queue), count in sorted(counts.items())
