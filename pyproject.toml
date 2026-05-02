@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prefect-sweep-mcp"
+version = "0.1.0"
+description = "MCP server that exposes batch-oriented controls on top of Prefect and a SQLite metadata store."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp>=1.9.0",
+  "pydantic>=2.7",
+  "requests>=2.31",
+]
+
+[tool.setuptools]
+packages = ["prefect_sweep_mcp"]
+
