@@ -257,8 +257,12 @@ class OperatorService:
         if worker_id is not None:
             values["worker_id"] = worker_id
             values["total_workers"] = total_workers
-        template_string = template.command_template or template.default_cmd
-        return template_string.format(**values)
+        if template.command_template:
+            try:
+                return template.command_template.format(**values)
+            except KeyError:
+                pass
+        return template.default_cmd
 
     def _validate_overrides(self, template: ExecutionTemplate, overrides: dict) -> None:
         allowed = {"branch", "commit", *template.allowed_launch_overrides}

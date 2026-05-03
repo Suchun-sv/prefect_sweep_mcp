@@ -173,7 +173,7 @@ class BatchService:
         overrides.pop("branch", None)
         overrides.pop("commit", None)
         if request.expected_shards <= 1:
-            return [(None, (template.command_template or template.default_cmd).format(**overrides))]
+            return [(None, self._render_command(template, overrides))]
 
         commands: list[tuple[int | None, str]] = []
         total_workers = request.expected_shards
@@ -183,7 +183,7 @@ class BatchService:
                 "worker_id": worker_id,
                 "total_workers": total_workers,
             }
-            commands.append((worker_id, (template.command_template or template.default_cmd).format(**params)))
+            commands.append((worker_id, self._render_command(template, params)))
         return commands
 
     def _validate_overrides(self, template: ExecutionTemplate, overrides: dict[str, Any]) -> None:
@@ -193,6 +193,14 @@ class BatchService:
             raise ValueError(
                 f"Template {template.name!r} does not allow runtime overrides for: {', '.join(invalid)}"
             )
+
+    def _render_command(self, template: ExecutionTemplate, values: dict[str, Any]) -> str:
+        if template.command_template:
+            try:
+                return template.command_template.format(**values)
+            except KeyError:
+                pass
+        return template.default_cmd
 
     def _normalize_state(self, state: str) -> str:
         lowered = state.lower()
