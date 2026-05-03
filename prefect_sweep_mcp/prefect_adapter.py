@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 import requests
+from template_catalog import FLOW_NAME
 
 
 class PrefectAdapter(Protocol):
     def list_work_pools(self) -> list[dict[str, Any]]: ...
     def list_work_queues(self) -> list[dict[str, Any]]: ...
     def list_workers(self) -> list[dict[str, Any]]: ...
+    def get_deployment_by_name(self, deployment_name: str) -> dict[str, Any]: ...
     def create_flow_run_from_deployment(self, deployment_name: str, parameters: dict[str, Any]) -> str: ...
     def get_flow_run(self, flow_run_id: str) -> dict[str, Any]: ...
     def cancel_flow_run(self, flow_run_id: str) -> None: ...
@@ -61,12 +63,25 @@ class HTTPPrefectAdapter:
                 workers.append(worker)
         return workers
 
+    def get_deployment_by_name(self, deployment_name: str) -> dict[str, Any]:
+        return self._get(f"/deployments/name/{FLOW_NAME}/{deployment_name}")
+
     def create_flow_run_from_deployment(self, deployment_name: str, parameters: dict[str, Any]) -> str:
         payload = {
             "deployment_name": deployment_name,
             "parameters": parameters,
         }
-        result = self._post("/deployments/create_flow_run", payload)
+        try:
+            result = self._post("/deployments/create_flow_run", payload)
+        except requests.HTTPError as exc:
+            response = exc.response
+            if response is None or response.status_code != 404:
+                raise
+            deployment = self._get(f"/deployments/name/{FLOW_NAME}/{deployment_name}")
+            deployment_id = deployment.get("id")
+            if not deployment_id:
+                raise RuntimeError(f"Prefect did not return an id for deployment {FLOW_NAME}/{deployment_name}")
+            result = self._post(f"/deployments/{deployment_id}/create_flow_run", {"parameters": parameters})
         flow_run_id = result.get("id")
         if not flow_run_id:
             raise RuntimeError(f"Prefect did not return a flow-run id for deployment {deployment_name}")

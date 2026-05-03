@@ -21,6 +21,15 @@ class PlatformStore:
 
     def _init_db(self) -> None:
         with self._connect() as conn:
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(execution_templates)").fetchall()}
+            if columns and "repo_local_path" not in columns:
+                conn.executescript(
+                    """
+                    DROP TABLE IF EXISTS execution_templates;
+                    DROP TABLE IF EXISTS batch_launches;
+                    DROP TABLE IF EXISTS shard_runs;
+                    """
+                )
             conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS execution_templates (
@@ -29,21 +38,26 @@ class PlatformStore:
                     project_id TEXT,
                     deployment_name TEXT NOT NULL,
                     repo_url TEXT NOT NULL,
-                    branch TEXT,
+                    repo_local_path TEXT NOT NULL,
+                    default_branch TEXT,
                     default_env_json TEXT NOT NULL,
                     work_pool TEXT NOT NULL,
                     work_queue TEXT NOT NULL,
-                    command_template TEXT NOT NULL,
+                    default_cmd TEXT NOT NULL,
+                    command_template TEXT,
                     description TEXT NOT NULL,
-                    allowed_queues_json TEXT NOT NULL
+                    allowed_queues_json TEXT NOT NULL,
+                    allowed_launch_overrides_json TEXT NOT NULL,
+                    allowed_tasks_json TEXT NOT NULL
                 );
-
+                
                 CREATE TABLE IF NOT EXISTS batch_launches (
                     id TEXT PRIMARY KEY,
                     template_id TEXT NOT NULL,
                     submitted_at TEXT NOT NULL,
                     submitted_by TEXT NOT NULL,
-                    status TEXT NOT NULL
+                    status TEXT NOT NULL,
+                    launch_overrides_json TEXT NOT NULL
                 );
 
                 CREATE TABLE IF NOT EXISTS shard_runs (
@@ -63,9 +77,10 @@ class PlatformStore:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO execution_templates
-                (id, name, project_id, deployment_name, repo_url, branch, default_env_json,
-                 work_pool, work_queue, command_template, description, allowed_queues_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (id, name, project_id, deployment_name, repo_url, repo_local_path, default_branch, default_env_json,
+                 work_pool, work_queue, default_cmd, command_template, description, allowed_queues_json,
+                 allowed_launch_overrides_json, allowed_tasks_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     template.id,
@@ -73,13 +88,17 @@ class PlatformStore:
                     template.project_id,
                     template.deployment_name,
                     template.repo_url,
-                    template.branch,
+                    template.repo_local_path,
+                    template.default_branch,
                     json.dumps(template.default_env),
                     template.work_pool,
                     template.work_queue,
+                    template.default_cmd,
                     template.command_template,
                     template.description,
                     json.dumps(template.allowed_queues),
+                    json.dumps(template.allowed_launch_overrides),
+                    json.dumps(template.allowed_tasks),
                 ),
             )
         return template
@@ -97,12 +116,24 @@ class PlatformStore:
             ).fetchone()
         return self._template_from_row(row) if row else None
 
-    def create_batch(self, template_id: str, submitted_by: str) -> BatchLaunch:
-        batch = BatchLaunch(id=str(uuid.uuid4()), template_id=template_id, submitted_by=submitted_by)
+    def create_batch(self, template_id: str, submitted_by: str, launch_overrides: dict | None = None) -> BatchLaunch:
+        batch = BatchLaunch(
+            id=str(uuid.uuid4()),
+            template_id=template_id,
+            submitted_by=submitted_by,
+            launch_overrides=launch_overrides or {},
+        )
         with self._connect() as conn:
             conn.execute(
-                "INSERT INTO batch_launches (id, template_id, submitted_at, submitted_by, status) VALUES (?, ?, ?, ?, ?)",
-                (batch.id, batch.template_id, batch.submitted_at, batch.submitted_by, batch.status),
+                "INSERT INTO batch_launches (id, template_id, submitted_at, submitted_by, status, launch_overrides_json) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    batch.id,
+                    batch.template_id,
+                    batch.submitted_at,
+                    batch.submitted_by,
+                    batch.status,
+                    json.dumps(batch.launch_overrides),
+                ),
             )
         return batch
 
@@ -124,6 +155,7 @@ class PlatformStore:
             submitted_at=row["submitted_at"],
             submitted_by=row["submitted_by"],
             status=row["status"],
+            launch_overrides=json.loads(row["launch_overrides_json"]),
         )
 
     def add_shard_run(self, shard: ShardRun) -> ShardRun:
@@ -168,13 +200,17 @@ class PlatformStore:
             project_id=row["project_id"],
             deployment_name=row["deployment_name"],
             repo_url=row["repo_url"],
-            branch=row["branch"],
+            repo_local_path=row["repo_local_path"],
+            default_branch=row["default_branch"],
             default_env=json.loads(row["default_env_json"]),
             work_pool=row["work_pool"],
             work_queue=row["work_queue"],
+            default_cmd=row["default_cmd"],
             command_template=row["command_template"],
             description=row["description"],
             allowed_queues=json.loads(row["allowed_queues_json"]),
+            allowed_launch_overrides=json.loads(row["allowed_launch_overrides_json"]),
+            allowed_tasks=json.loads(row["allowed_tasks_json"]),
         )
 
     def _shard_from_row(self, row: sqlite3.Row) -> ShardRun:

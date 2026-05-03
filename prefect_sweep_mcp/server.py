@@ -5,48 +5,118 @@ from mcp.server.fastmcp import FastMCP
 from .batch_service import BatchService
 from .config import MCPConfig
 from .models import ExecutionTemplate, SubmitBatchRequest
+from .operator_service import OperatorService
 from .platform_store import PlatformStore
 from .prefect_adapter import HTTPPrefectAdapter
+from template_catalog import load_template_catalog
 
 
 config = MCPConfig()
 store = PlatformStore(config.sqlite_path)
 prefect = HTTPPrefectAdapter(config.prefect_api_url)
-service = BatchService(store, prefect)
+batch_service = BatchService(store, prefect)
+operator_service = OperatorService(store, prefect, config)
 
-# Seed one concrete template for VectorBenchmark shard jobs.
-store.seed_template(
-    ExecutionTemplate(
-        id="vectorbench-embedding-template",
-        name="vectorbench_embedding_shards",
-        deployment_name="setup-update-run-cmd-flow/vectorbench_embedding_shards",
-        repo_url="https://github.com/DBgroup-Edinburgh/VectorBenchmark",
-        branch="encode-all-beir",
-        default_env={},
-        work_pool="GPU_pool",
-        work_queue="vectorbench",
-        allowed_queues=["vectorbench"],
-        command_template=(
-            "uv run vectorbench embedding generate --model {model} --dataset {dataset} "
-            "--source {source} --data-path {data_path} --embedding-path {embedding_path} "
-            "--embedding-model-path {embedding_model_path} --embedding-cache-path {embedding_cache_path} "
-            "--batch-size {batch_size} --total-workers {total_workers} --worker-id {worker_id} --no-upload"
-        ),
-        description="Shard-based VectorBenchmark embedding generation template.",
+for template in load_template_catalog():
+    store.seed_template(
+        ExecutionTemplate(
+            id=template.name,
+            name=template.name,
+            deployment_name=template.deployment_name,
+            repo_url=template.repo_url,
+            repo_local_path=template.repo_local_path,
+            default_branch=template.default_branch,
+            default_env=template.default_env,
+            work_pool=template.work_pool,
+            work_queue=template.work_queue,
+            default_cmd=template.default_cmd,
+            command_template=template.command_template,
+            description=template.description,
+            allowed_queues=[template.work_queue],
+            allowed_launch_overrides=template.allowed_launch_overrides,
+            allowed_tasks=template.allowed_tasks,
+        )
     )
-)
 
 mcp = FastMCP("prefect-sweep")
 
 
 @mcp.tool()
 def list_templates() -> list[dict]:
-    return [template.model_dump() for template in service.list_templates()]
+    return [template.model_dump() for template in batch_service.list_templates()]
+
+
+@mcp.tool()
+def get_template(template_name: str) -> dict:
+    for template in batch_service.list_templates():
+        if template.name == template_name:
+            return template.model_dump()
+    raise ValueError(f"Unknown template: {template_name}")
 
 
 @mcp.tool()
 def list_workers() -> list[dict]:
-    return [worker.model_dump() for worker in service.list_workers()]
+    return [worker.model_dump() for worker in operator_service.list_workers()]
+
+
+@mcp.tool()
+def list_work_pools() -> list[dict]:
+    return operator_service.list_work_pools()
+
+
+@mcp.tool()
+def list_work_queues() -> list[dict]:
+    return operator_service.list_work_queues()
+
+
+@mcp.tool()
+def generate_deployment_config(template_name: str | None = None, include_all: bool = False) -> dict:
+    return operator_service.generate_deployment_config(template_name=template_name, include_all=include_all).model_dump()
+
+
+@mcp.tool()
+def get_generated_deployment_config(template_name: str | None = None, include_all: bool = False) -> dict:
+    return operator_service.get_generated_deployment_config(template_name=template_name, include_all=include_all).model_dump()
+
+
+@mcp.tool()
+def deploy_template(template_name: str) -> dict:
+    return operator_service.deploy_template(template_name).model_dump()
+
+
+@mcp.tool()
+def deploy_all_templates() -> list[dict]:
+    return [item.model_dump() for item in operator_service.deploy_all_templates()]
+
+
+@mcp.tool()
+def get_template_deploy_status(template_name: str) -> dict:
+    return operator_service.get_template_deploy_status(template_name).model_dump()
+
+
+@mcp.tool()
+def submit_run(template_name: str, parameter_overrides: dict | None = None) -> dict:
+    return operator_service.submit_run(template_name, parameter_overrides or {}).model_dump()
+
+
+@mcp.tool()
+def get_run_status(flow_run_id: str) -> dict:
+    return operator_service.get_run_status(flow_run_id).model_dump()
+
+
+@mcp.tool()
+def get_run_logs(flow_run_id: str, limit: int = 200) -> dict:
+    return operator_service.get_run_logs(flow_run_id, limit=limit).model_dump()
+
+
+@mcp.tool()
+def get_template_runtime_requirements(template_name: str) -> dict:
+    return operator_service.get_template_runtime_requirements(template_name).model_dump()
+
+
+@mcp.tool()
+def check_generated_artifact_gitignore() -> dict:
+    return operator_service.check_generated_artifact_gitignore().model_dump()
 
 
 @mcp.tool()
@@ -66,19 +136,18 @@ def submit_batch(
         work_pool=work_pool,
         work_queue=work_queue,
     )
-    return service.submit_batch(request).model_dump()
+    return batch_service.submit_batch(request).model_dump()
 
 
 @mcp.tool()
 def get_batch_status(batch_id: str) -> dict:
-    return service.get_batch_status(batch_id).model_dump()
+    return batch_service.get_batch_status(batch_id).model_dump()
 
 
 @mcp.tool()
 def retry_failed_shards(batch_id: str) -> dict:
-    return service.retry_failed_shards(batch_id).model_dump()
+    return batch_service.retry_failed_shards(batch_id).model_dump()
 
 
 if __name__ == "__main__":
     mcp.run()
-

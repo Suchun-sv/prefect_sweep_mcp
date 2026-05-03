@@ -22,13 +22,17 @@ class ExecutionTemplate(BaseModel):
     project_id: str | None = None
     deployment_name: str
     repo_url: str
-    branch: str | None = None
+    repo_local_path: str
+    default_branch: str | None = None
     default_env: dict[str, str] = Field(default_factory=dict)
     work_pool: str
     work_queue: str
-    command_template: str
+    default_cmd: str
+    command_template: str | None = None
     description: str = ""
     allowed_queues: list[str] = Field(default_factory=list)
+    allowed_launch_overrides: list[str] = Field(default_factory=list)
+    allowed_tasks: list[str] = Field(default_factory=list)
 
 
 class BatchLaunch(BaseModel):
@@ -37,6 +41,7 @@ class BatchLaunch(BaseModel):
     submitted_at: str = Field(default_factory=utc_now)
     submitted_by: str = "mcp"
     status: str = "submitted"
+    launch_overrides: dict[str, Any] = Field(default_factory=dict)
 
 
 class ShardRun(BaseModel):
@@ -101,3 +106,63 @@ class RetryFailedShardsResponse(BaseModel):
     retried_count: int
     new_run_ids: list[str]
 
+
+class GeneratedDeploymentConfigResponse(BaseModel):
+    path: str
+    deployments: list[str]
+    contents: str | None = None
+
+
+class DeployTemplateResponse(BaseModel):
+    deployment_name: str
+    prefect_id: str | None = None
+    url: str | None = None
+
+
+class TemplateDeployStatusResponse(BaseModel):
+    exists: bool
+    template_name: str
+    deployment_name: str
+    pool: str
+    queue: str
+    prefect_id: str | None = None
+    url: str | None = None
+    detail: str | None = None
+
+
+class SubmitRunResponse(BaseModel):
+    template_name: str
+    deployment_name: str
+    flow_run_id: str
+    url: str | None = None
+
+
+class RunStatusResponse(BaseModel):
+    flow_run_id: str
+    state: str
+    url: str | None = None
+    deployment_name: str | None = None
+    detail: str | None = None
+
+
+class RunLogsResponse(BaseModel):
+    flow_run_id: str
+    logs: list[str]
+
+
+class GeneratedArtifactGitignoreResponse(BaseModel):
+    generated_dir: str
+    ignored: bool
+    suggested_entry: str
+
+
+class TemplateRuntimeRequirementsResponse(BaseModel):
+    template_name: str
+    deployment_name: str
+    repo_url: str
+    repo_local_path: str
+    default_branch: str | None = None
+    work_pool: str
+    work_queue: str
+    default_cmd: str
+    allowed_launch_overrides: list[str]

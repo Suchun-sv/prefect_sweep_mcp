@@ -32,12 +32,8 @@ class BatchService:
         for worker in workers:
             pool = worker.get("work_pool_name", "")
             queue = worker.get("work_queue_name", "")
-            status = str(worker.get("status", "")).upper()
             key = (pool, queue)
-            if status == "ONLINE":
-                counts[key] = counts.get(key, 0) + 1
-            else:
-                counts.setdefault(key, 0)
+            counts[key] = counts.get(key, 0) + 1
         return [
             WorkerQueueStatus(pool=pool, queue=queue, online_workers=count)
             for (pool, queue), count in sorted(counts.items())
@@ -52,15 +48,17 @@ class BatchService:
         work_queue = request.work_queue or template.work_queue
         if template.allowed_queues and work_queue not in template.allowed_queues:
             raise ValueError(f"Queue {work_queue!r} is not allowed for template {template.name!r}")
+        self._validate_overrides(template, request.parameter_overrides)
 
-        batch = self.store.create_batch(template.id, request.submitted_by)
+        batch = self.store.create_batch(template.id, request.submitted_by, request.parameter_overrides)
         commands = self._expand_commands(template, request)
         run_ids: list[str] = []
         for worker_id, command in commands:
             parameters = {
                 "repo_url": template.repo_url,
-                "repo_local_path": request.parameter_overrides.get("repo_local_path", "~/github/run-target"),
-                "branch": request.parameter_overrides.get("branch", template.branch),
+                "repo_local_path": template.repo_local_path,
+                "branch": request.parameter_overrides.get("branch", template.default_branch),
+                "commit": request.parameter_overrides.get("commit"),
                 "cmd": command,
             }
             run_id = self.prefect.create_flow_run_from_deployment(template.deployment_name, parameters)
@@ -142,8 +140,9 @@ class BatchService:
         for shard in failed_shards:
             parameters = {
                 "repo_url": template.repo_url,
-                "repo_local_path": "~/github/run-target",
-                "branch": template.branch,
+                "repo_local_path": template.repo_local_path,
+                "branch": batch.launch_overrides.get("branch", template.default_branch),
+                "commit": batch.launch_overrides.get("commit"),
                 "cmd": shard.command,
             }
             run_id = self.prefect.create_flow_run_from_deployment(template.deployment_name, parameters)
@@ -171,8 +170,10 @@ class BatchService:
 
     def _expand_commands(self, template: ExecutionTemplate, request: SubmitBatchRequest) -> list[tuple[int | None, str]]:
         overrides = dict(request.parameter_overrides)
+        overrides.pop("branch", None)
+        overrides.pop("commit", None)
         if request.expected_shards <= 1:
-            return [(None, template.command_template.format(**overrides))]
+            return [(None, (template.command_template or template.default_cmd).format(**overrides))]
 
         commands: list[tuple[int | None, str]] = []
         total_workers = request.expected_shards
@@ -182,8 +183,16 @@ class BatchService:
                 "worker_id": worker_id,
                 "total_workers": total_workers,
             }
-            commands.append((worker_id, template.command_template.format(**params)))
+            commands.append((worker_id, (template.command_template or template.default_cmd).format(**params)))
         return commands
+
+    def _validate_overrides(self, template: ExecutionTemplate, overrides: dict[str, Any]) -> None:
+        allowed = {"branch", "commit", *template.allowed_launch_overrides}
+        invalid = sorted(set(overrides) - set(allowed))
+        if invalid:
+            raise ValueError(
+                f"Template {template.name!r} does not allow runtime overrides for: {', '.join(invalid)}"
+            )
 
     def _normalize_state(self, state: str) -> str:
         lowered = state.lower()

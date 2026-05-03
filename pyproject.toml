@@ -10,10 +10,12 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "mcp>=1.9.0",
+  "prefect>=3.0",
   "pydantic>=2.7",
+  "pyyaml>=6.0",
   "requests>=2.31",
 ]
 
 [tool.setuptools]
 packages = ["prefect_sweep_mcp"]
-
+py-modules = ["template_catalog"]
