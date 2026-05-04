@@ -8,7 +8,14 @@ from typing import Iterable
 
 import yaml
 
-from template_catalog import load_template_catalog, render_prefect_yaml, render_single_template_prefect_yaml
+from template_catalog import (
+    CATALOG_PATH,
+    RepoTemplate,
+    TemplateCatalogError,
+    load_template_catalog,
+    render_prefect_yaml,
+    render_single_template_prefect_yaml,
+)
 
 from .config import MCPConfig
 from .models import (
@@ -16,11 +23,13 @@ from .models import (
     ExecutionTemplate,
     GeneratedArtifactGitignoreResponse,
     GeneratedDeploymentConfigResponse,
+    RegisterTemplateResponse,
     RunLogsResponse,
     RunStatusResponse,
     SubmitRunResponse,
     TemplateDeployStatusResponse,
     TemplateRuntimeRequirementsResponse,
+    UnregisterTemplateResponse,
     WorkerQueueStatus,
 )
 from .platform_store import PlatformStore
@@ -195,6 +204,145 @@ class OperatorService:
             default_cmd=template.default_cmd,
             allowed_launch_overrides=template.allowed_launch_overrides,
         )
+
+    def register_template(
+        self,
+        name: str,
+        deployment_name: str,
+        repo_url: str,
+        repo_local_path: str,
+        work_pool: str,
+        work_queue: str,
+        default_cmd: str,
+        description: str = "",
+        default_branch: str | None = None,
+        default_env: dict[str, str] | None = None,
+        command_template: str | None = None,
+        allowed_launch_overrides: list[str] | None = None,
+        allowed_tasks: list[str] | None = None,
+        overwrite: bool = False,
+        persist: bool = True,
+    ) -> RegisterTemplateResponse:
+        repo_template = RepoTemplate(
+            name=name,
+            description=description,
+            deployment_name=deployment_name,
+            repo_url=repo_url,
+            repo_local_path=repo_local_path,
+            default_branch=default_branch,
+            work_pool=work_pool,
+            work_queue=work_queue,
+            default_env=default_env or {},
+            default_cmd=default_cmd,
+            command_template=command_template,
+            allowed_launch_overrides=allowed_launch_overrides or [],
+            allowed_tasks=allowed_tasks or [],
+        )
+
+        existing = self.store.get_template_by_name(name)
+        if existing is not None and not overwrite:
+            raise ValueError(
+                f"Template {name!r} already exists. Pass overwrite=True to replace it."
+            )
+
+        for stored in self.store.list_templates():
+            if stored.name == name:
+                continue
+            if stored.deployment_name == repo_template.deployment_name:
+                raise ValueError(
+                    f"Deployment name {repo_template.deployment_name!r} is already used by template {stored.name!r}."
+                )
+
+        self.store.seed_template(
+            ExecutionTemplate(
+                id=repo_template.name,
+                name=repo_template.name,
+                deployment_name=repo_template.deployment_name,
+                repo_url=repo_template.repo_url,
+                repo_local_path=repo_template.repo_local_path,
+                default_branch=repo_template.default_branch,
+                default_env=repo_template.default_env,
+                work_pool=repo_template.work_pool,
+                work_queue=repo_template.work_queue,
+                default_cmd=repo_template.default_cmd,
+                command_template=repo_template.command_template,
+                description=repo_template.description,
+                allowed_queues=[repo_template.work_queue],
+                allowed_launch_overrides=repo_template.allowed_launch_overrides,
+                allowed_tasks=repo_template.allowed_tasks,
+            )
+        )
+
+        persisted = False
+        if persist:
+            self._upsert_template_in_catalog(repo_template)
+            persisted = True
+
+        return RegisterTemplateResponse(
+            template_name=repo_template.name,
+            deployment_name=repo_template.deployment_name,
+            persisted_to_catalog=persisted,
+            overwritten=existing is not None,
+        )
+
+    def unregister_template(self, template_name: str, persist: bool = True) -> UnregisterTemplateResponse:
+        removed_store = self.store.delete_template_by_name(template_name)
+        removed_catalog = False
+        if persist:
+            removed_catalog = self._remove_template_from_catalog(template_name)
+        if not removed_store and not removed_catalog:
+            raise ValueError(f"Unknown template: {template_name}")
+        return UnregisterTemplateResponse(
+            template_name=template_name,
+            removed_from_store=removed_store,
+            removed_from_catalog=removed_catalog,
+        )
+
+    def _upsert_template_in_catalog(self, template: RepoTemplate) -> None:
+        catalog_path = self._catalog_path()
+        data = self._read_catalog(catalog_path)
+        entry = template.model_dump(exclude_none=False)
+        replaced = False
+        for index, existing in enumerate(data["templates"]):
+            if existing.get("name") == template.name:
+                data["templates"][index] = entry
+                replaced = True
+                break
+        if not replaced:
+            data["templates"].append(entry)
+        self._write_catalog(catalog_path, data)
+        try:
+            load_template_catalog(catalog_path)
+        except TemplateCatalogError:
+            raise
+
+    def _remove_template_from_catalog(self, template_name: str) -> bool:
+        catalog_path = self._catalog_path()
+        if not catalog_path.exists():
+            return False
+        data = self._read_catalog(catalog_path)
+        before = len(data["templates"])
+        data["templates"] = [t for t in data["templates"] if t.get("name") != template_name]
+        if len(data["templates"]) == before:
+            return False
+        self._write_catalog(catalog_path, data)
+        return True
+
+    def _catalog_path(self) -> Path:
+        override = getattr(self, "catalog_path_override", None)
+        return Path(override) if override else CATALOG_PATH
+
+    def _read_catalog(self, path: Path) -> dict:
+        if not path.exists():
+            return {"templates": []}
+        raw = yaml.safe_load(path.read_text()) or {}
+        if "templates" not in raw or not isinstance(raw["templates"], list):
+            raw["templates"] = []
+        return raw
+
+    def _write_catalog(self, path: Path, data: dict) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
 
     def check_generated_artifact_gitignore(self) -> GeneratedArtifactGitignoreResponse:
         gitignore = self.repo_root / ".gitignore"

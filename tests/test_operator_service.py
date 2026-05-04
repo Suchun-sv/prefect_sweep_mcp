@@ -128,6 +128,80 @@ class OperatorServiceTests(unittest.TestCase):
         self.assertEqual(response.deployment_name, "practice_101")
         self.assertTrue(response.flow_run_id.startswith("run-"))
 
+    def test_register_template_persists_and_seeds_store(self):
+        catalog_path = Path(self.tempdir.name) / "catalog.yaml"
+        catalog_path.write_text("templates: []\n")
+        self.service.catalog_path_override = str(catalog_path)
+
+        response = self.service.register_template(
+            name="my_repo",
+            deployment_name="my_repo_dep",
+            repo_url="https://github.com/me/my_repo",
+            repo_local_path="~/github/my_repo",
+            work_pool="CPU_pool",
+            work_queue="practice",
+            default_cmd="python train.py",
+            command_template="python train.py --epochs {epochs}",
+            allowed_launch_overrides=["epochs"],
+        )
+
+        self.assertEqual(response.template_name, "my_repo")
+        self.assertTrue(response.persisted_to_catalog)
+        self.assertFalse(response.overwritten)
+        self.assertIsNotNone(self.store.get_template_by_name("my_repo"))
+        self.assertIn("my_repo", catalog_path.read_text())
+
+    def test_register_template_rejects_duplicate_without_overwrite(self):
+        catalog_path = Path(self.tempdir.name) / "catalog.yaml"
+        catalog_path.write_text("templates: []\n")
+        self.service.catalog_path_override = str(catalog_path)
+        with self.assertRaises(ValueError):
+            self.service.register_template(
+                name="practice_101",
+                deployment_name="practice_101_v2",
+                repo_url="https://github.com/x/y",
+                repo_local_path="~/github/y",
+                work_pool="CPU_pool",
+                work_queue="practice",
+                default_cmd="echo hi",
+            )
+
+    def test_register_template_rejects_duplicate_deployment_name(self):
+        catalog_path = Path(self.tempdir.name) / "catalog.yaml"
+        catalog_path.write_text("templates: []\n")
+        self.service.catalog_path_override = str(catalog_path)
+        with self.assertRaises(ValueError):
+            self.service.register_template(
+                name="another",
+                deployment_name="practice_101",
+                repo_url="https://github.com/x/y",
+                repo_local_path="~/github/y",
+                work_pool="CPU_pool",
+                work_queue="practice",
+                default_cmd="echo hi",
+            )
+
+    def test_unregister_template_removes_from_store_and_catalog(self):
+        catalog_path = Path(self.tempdir.name) / "catalog.yaml"
+        catalog_path.write_text("templates: []\n")
+        self.service.catalog_path_override = str(catalog_path)
+        self.service.register_template(
+            name="ephemeral",
+            deployment_name="ephemeral_dep",
+            repo_url="https://github.com/x/ephemeral",
+            repo_local_path="~/github/ephemeral",
+            work_pool="CPU_pool",
+            work_queue="practice",
+            default_cmd="echo gone",
+        )
+
+        response = self.service.unregister_template("ephemeral")
+
+        self.assertTrue(response.removed_from_store)
+        self.assertTrue(response.removed_from_catalog)
+        self.assertIsNone(self.store.get_template_by_name("ephemeral"))
+        self.assertNotIn("ephemeral", catalog_path.read_text())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -156,6 +156,19 @@ class GeneratedArtifactGitignoreResponse(BaseModel):
     suggested_entry: str
 
 
+class RegisterTemplateResponse(BaseModel):
+    template_name: str
+    deployment_name: str
+    persisted_to_catalog: bool
+    overwritten: bool = False
+
+
+class UnregisterTemplateResponse(BaseModel):
+    template_name: str
+    removed_from_store: bool
+    removed_from_catalog: bool
+
+
 class TemplateRuntimeRequirementsResponse(BaseModel):
     template_name: str
     deployment_name: str

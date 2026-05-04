@@ -110,6 +110,48 @@ def get_run_logs(flow_run_id: str, limit: int = 200) -> dict:
 
 
 @mcp.tool()
+def register_template(
+    name: str,
+    deployment_name: str,
+    repo_url: str,
+    repo_local_path: str,
+    work_pool: str,
+    work_queue: str,
+    default_cmd: str,
+    description: str = "",
+    default_branch: str | None = None,
+    default_env: dict[str, str] | None = None,
+    command_template: str | None = None,
+    allowed_launch_overrides: list[str] | None = None,
+    allowed_tasks: list[str] | None = None,
+    overwrite: bool = False,
+    persist: bool = True,
+) -> dict:
+    return operator_service.register_template(
+        name=name,
+        deployment_name=deployment_name,
+        repo_url=repo_url,
+        repo_local_path=repo_local_path,
+        work_pool=work_pool,
+        work_queue=work_queue,
+        default_cmd=default_cmd,
+        description=description,
+        default_branch=default_branch,
+        default_env=default_env,
+        command_template=command_template,
+        allowed_launch_overrides=allowed_launch_overrides,
+        allowed_tasks=allowed_tasks,
+        overwrite=overwrite,
+        persist=persist,
+    ).model_dump()
+
+
+@mcp.tool()
+def unregister_template(template_name: str, persist: bool = True) -> dict:
+    return operator_service.unregister_template(template_name, persist=persist).model_dump()
+
+
+@mcp.tool()
 def get_template_runtime_requirements(template_name: str) -> dict:
     return operator_service.get_template_runtime_requirements(template_name).model_dump()
 

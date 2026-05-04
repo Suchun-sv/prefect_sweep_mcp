@@ -103,6 +103,11 @@ class PlatformStore:
             )
         return template
 
+    def delete_template_by_name(self, name: str) -> bool:
+        with self._connect() as conn:
+            cursor = conn.execute("DELETE FROM execution_templates WHERE name = ?", (name,))
+            return cursor.rowcount > 0
+
     def list_templates(self) -> list[ExecutionTemplate]:
         with self._connect() as conn:
             rows = conn.execute("SELECT * FROM execution_templates ORDER BY name").fetchall()
