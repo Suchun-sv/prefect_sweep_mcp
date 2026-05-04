@@ -2,15 +2,15 @@
 
 `prefect_sweep_mcp` is a small MCP server that sits in front of a Prefect deployment and a local SQLite metadata store.
 
-It is meant to give an agent a safer control surface than raw Prefect objects. Instead of exposing arbitrary commands, it exposes a few batch-oriented tools such as:
+It is meant to give an agent a safer control surface than raw Prefect objects. Instead of exposing arbitrary commands, it exposes a curated set of tools spanning the full lifecycle:
 
-- `list_templates`
-- `list_workers`
-- `submit_batch`
-- `get_batch_status`
-- `retry_failed_shards`
+- **Onboard a new repo at runtime**: `register_template`, `unregister_template`
+- **Inspect**: `list_templates`, `get_template`, `list_workers`, `list_work_pools`, `list_work_queues`, `get_template_runtime_requirements`
+- **Deploy**: `generate_deployment_config`, `deploy_template`, `deploy_all_templates`, `get_template_deploy_status`
+- **Run**: `submit_run`, `submit_batch`, `get_run_status`, `get_run_logs`
+- **Batch ops**: `get_batch_status`, `retry_failed_shards`
 
-The current bootstrap seeds one concrete template for shard-based `VectorBenchmark` embedding generation.
+Templates are seeded from `templates/catalog.yaml` at startup, and additional templates can be added at runtime via `register_template` (which also persists back to the catalog by default).
 
 ## What This Repo Contains
 
@@ -169,7 +169,32 @@ Example client config:
 
 Replace the paths with real absolute paths on the machine where the MCP client runs.
 
+## Onboard a Brand-New Repo Through the MCP
+
+Once the MCP server is connected to your client (e.g. Claude Code via `claude mcp add prefect-sweep ...`), an agent can register a new repo, deploy it, and submit runs **without any YAML edits or server restarts**:
+
+1. `register_template(name, deployment_name, repo_url, repo_local_path, work_pool, work_queue, default_cmd, ...)` — seeds SQLite immediately and (by default) appends/updates the entry in `templates/catalog.yaml` so it survives a restart.
+2. `deploy_template(name)` — generates `.prefect_mcp/prefect.yaml` and runs `prefect deploy` for that one template.
+3. `submit_run(name, parameter_overrides=...)` — fires one flow run.
+4. `get_run_status(flow_run_id)` / `get_run_logs(flow_run_id)` — poll until done.
+
+Use `unregister_template(name)` to remove a template from both SQLite and `catalog.yaml`.
+
 ## Tools Exposed
+
+### `register_template`
+
+Adds a new execution template at runtime.
+
+Required arguments: `name`, `deployment_name`, `repo_url`, `repo_local_path`, `work_pool`, `work_queue`, `default_cmd`.
+
+Optional: `description`, `default_branch`, `default_env`, `command_template`, `allowed_launch_overrides`, `allowed_tasks`, `overwrite` (default `False`), `persist` (default `True`, writes back to `templates/catalog.yaml`).
+
+Rejects duplicates: refuses if a template with the same `name` already exists (unless `overwrite=True`) or if `deployment_name` is already used by a different template.
+
+### `unregister_template`
+
+Removes a template by `name` from SQLite and (unless `persist=False`) from `templates/catalog.yaml`.
 
 ### `list_templates`
 
