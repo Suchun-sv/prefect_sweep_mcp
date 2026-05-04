@@ -76,7 +76,7 @@ class OperatorServiceTests(unittest.TestCase):
         self.service.generated_metadata_file = self.service.generated_dir / "last_generated.json"
         (self.repo_root / "ui").mkdir(parents=True, exist_ok=True)
         (self.repo_root / "ui" / "config.json").write_text(
-            '{"prefect_demo_repo_url":"https://github.com/Suchun-sv/prefect_sweep.git","worker_branch":"main","github_token":""}'
+            '{"prefect_demo_repo_url":"https://github.com/Suchun-sv/prefect_sweep_mcp.git","worker_branch":"main","github_token":""}'
         )
         self.store.seed_template(
             ExecutionTemplate(

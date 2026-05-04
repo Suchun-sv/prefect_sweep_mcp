@@ -423,10 +423,10 @@ class OperatorService:
     def _control_repo_settings(self) -> tuple[str, str, str]:
         config_path = self.repo_root / "ui" / "config.json"
         if not config_path.exists():
-            return "https://github.com/Suchun-sv/prefect_sweep.git", "main", ""
+            return "https://github.com/Suchun-sv/prefect_sweep_mcp.git", "main", ""
         raw = json.loads(config_path.read_text())
         return (
-            raw.get("prefect_demo_repo_url", "https://github.com/Suchun-sv/prefect_sweep.git"),
+            raw.get("prefect_demo_repo_url", "https://github.com/Suchun-sv/prefect_sweep_mcp.git"),
             raw.get("worker_branch", "main"),
             raw.get("github_token", ""),
         )
