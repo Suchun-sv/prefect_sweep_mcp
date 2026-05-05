@@ -150,6 +150,18 @@ class RunLogsResponse(BaseModel):
     logs: list[str]
 
 
+class CancelRunResponse(BaseModel):
+    flow_run_id: str
+    state: str
+    detail: str | None = None
+
+
+class CancelBatchResponse(BaseModel):
+    batch_id: str
+    cancelled_count: int
+    flow_run_ids: list[str]
+
+
 class GeneratedArtifactGitignoreResponse(BaseModel):
     generated_dir: str
     ignored: bool

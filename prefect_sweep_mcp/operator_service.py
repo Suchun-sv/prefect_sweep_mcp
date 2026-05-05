@@ -21,6 +21,7 @@ from .config import MCPConfig
 from .models import (
     DeployTemplateResponse,
     ExecutionTemplate,
+    CancelRunResponse,
     GeneratedArtifactGitignoreResponse,
     GeneratedDeploymentConfigResponse,
     RegisterTemplateResponse,
@@ -190,6 +191,13 @@ class OperatorService:
 
     def get_run_logs(self, flow_run_id: str, limit: int = 50, tail: bool = True) -> RunLogsResponse:
         return RunLogsResponse(flow_run_id=flow_run_id, logs=self.prefect.get_run_logs(flow_run_id, limit=limit, tail=tail))
+
+    def cancel_run(self, flow_run_id: str) -> CancelRunResponse:
+        self.prefect.cancel_flow_run(flow_run_id)
+        self.store.update_shard_status(flow_run_id, "cancelled")
+        flow_run = self.prefect.get_flow_run(flow_run_id)
+        state = flow_run.get("state_name") or flow_run.get("state", {}).get("name") or "Cancelling"
+        return CancelRunResponse(flow_run_id=flow_run_id, state=state)
 
     def get_template_runtime_requirements(self, template_name: str) -> TemplateRuntimeRequirementsResponse:
         template = self._get_template(template_name)
@@ -405,12 +413,18 @@ class OperatorService:
         if worker_id is not None:
             values["worker_id"] = worker_id
             values["total_workers"] = total_workers
-        if template.command_template:
-            try:
-                return template.command_template.format(**values)
-            except KeyError:
-                pass
-        return template.default_cmd
+        if not template.command_template:
+            return template.default_cmd
+        try:
+            return template.command_template.format(**values)
+        except KeyError as exc:
+            import string
+            missing = exc.args[0] if exc.args else "<unknown>"
+            required = sorted({f for _, f, _, _ in string.Formatter().parse(template.command_template) if f})
+            raise ValueError(
+                f"Template {template.name!r} command_template references {{{missing}}} but parameter_overrides did not supply it. "
+                f"Required keys: {required}"
+            ) from exc
 
     def _validate_overrides(self, template: ExecutionTemplate, overrides: dict) -> None:
         allowed = {"branch", "commit", *template.allowed_launch_overrides}

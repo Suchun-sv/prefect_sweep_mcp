@@ -112,6 +112,18 @@ def get_run_logs(flow_run_id: str, limit: int = 50, tail: bool = True) -> dict:
 
 
 @mcp.tool()
+def cancel_run(flow_run_id: str) -> dict:
+    """Cancel a single Prefect flow run by id."""
+    return operator_service.cancel_run(flow_run_id).model_dump()
+
+
+@mcp.tool()
+def cancel_batch(batch_id: str) -> dict:
+    """Cancel every shard flow run in a batch and mark the batch cancelled."""
+    return batch_service.cancel_batch(batch_id).model_dump()
+
+
+@mcp.tool()
 def register_template(
     name: str,
     deployment_name: str,

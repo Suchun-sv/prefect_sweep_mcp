@@ -6,6 +6,7 @@ from typing import Any
 
 from .models import (
     BatchStatusResponse,
+    CancelBatchResponse,
     ExecutionTemplate,
     RetryFailedShardsResponse,
     RunSummary,
@@ -159,11 +160,18 @@ class BatchService:
             new_run_ids.append(run_id)
         return RetryFailedShardsResponse(batch_id=batch_id, retried_count=len(new_run_ids), new_run_ids=new_run_ids)
 
-    def cancel_batch(self, batch_id: str) -> None:
+    def cancel_batch(self, batch_id: str) -> CancelBatchResponse:
+        flow_run_ids: list[str] = []
         for shard in self.store.list_shard_runs(batch_id):
             self.prefect.cancel_flow_run(shard.prefect_flow_run_id)
             self.store.update_shard_status(shard.prefect_flow_run_id, "cancelled")
+            flow_run_ids.append(shard.prefect_flow_run_id)
         self.store.update_batch_status(batch_id, "cancelled")
+        return CancelBatchResponse(
+            batch_id=batch_id,
+            cancelled_count=len(flow_run_ids),
+            flow_run_ids=flow_run_ids,
+        )
 
     def get_run_logs(self, flow_run_id: str, limit: int = 200) -> list[str]:
         return self.prefect.get_run_logs(flow_run_id, limit=limit)
@@ -195,12 +203,21 @@ class BatchService:
             )
 
     def _render_command(self, template: ExecutionTemplate, values: dict[str, Any]) -> str:
-        if template.command_template:
-            try:
-                return template.command_template.format(**values)
-            except KeyError:
-                pass
-        return template.default_cmd
+        if not template.command_template:
+            return template.default_cmd
+        try:
+            return template.command_template.format(**values)
+        except KeyError as exc:
+            missing = exc.args[0] if exc.args else "<unknown>"
+            raise ValueError(
+                f"Template {template.name!r} command_template references {{{missing}}} but parameter_overrides did not supply it. "
+                f"Required keys: {sorted(self._template_placeholders(template.command_template))}"
+            ) from exc
+
+    @staticmethod
+    def _template_placeholders(command_template: str) -> set[str]:
+        import string
+        return {field for _, field, _, _ in string.Formatter().parse(command_template) if field}
 
     def _normalize_state(self, state: str) -> str:
         lowered = state.lower()
