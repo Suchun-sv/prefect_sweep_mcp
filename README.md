@@ -145,6 +145,46 @@ python -m prefect_sweep_mcp.server
 
 That starts the FastMCP server defined in `prefect_sweep_mcp/server.py`.
 
+## Bootstrap a Worker on a New Machine
+
+`scripts/install_worker.sh` clones this repo into `~/.prefect_sweep_mcp`, installs `uv`, runs `uv sync`, and launches a Prefect worker inside a timestamped tmux session (e.g. `prefect-worker-20260505-142301`).
+
+One-shot install (interactive — prompts for missing values):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Suchun-sv/prefect_sweep_mcp/main/scripts/install_worker.sh | bash
+```
+
+Non-interactive — preset the values via env:
+
+```bash
+PREFECT_API_URL=http://your-prefect-host:4200/api \
+WORK_POOL=CPU_pool \
+WORK_QUEUE=practice \
+  bash <(curl -fsSL https://raw.githubusercontent.com/Suchun-sv/prefect_sweep_mcp/main/scripts/install_worker.sh)
+```
+
+Variables read by the script:
+
+| Variable | Required | Default | Notes |
+| --- | --- | --- | --- |
+| `PREFECT_API_URL` | yes | — | e.g. `http://host:4200/api` |
+| `WORK_POOL` | yes | — | e.g. `CPU_pool`, `GPU_pool` |
+| `WORK_QUEUE` | no | all queues | leave blank to listen on every queue in the pool |
+| `PREFECT_SWEEP_MCP_HOME` | no | `~/.prefect_sweep_mcp` | install location |
+| `PREFECT_SWEEP_MCP_REPO` | no | `git@github.com:Suchun-sv/prefect_sweep_mcp.git` | override for fork/private mirror |
+| `PREFECT_SWEEP_MCP_BRANCH` | no | `main` | branch to check out |
+
+Manage the worker session:
+
+```bash
+tmux ls                                      # find the session name
+tmux attach -t prefect-worker-<timestamp>    # attach
+tmux kill-session -t prefect-worker-<timestamp>  # stop
+```
+
+Requires `tmux` and `git` already installed on the host. `uv` is auto-installed if missing.
+
 ## MCP Client Configuration
 
 An MCP client needs to launch the server as a local process.
