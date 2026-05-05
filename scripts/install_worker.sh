@@ -54,11 +54,21 @@ prompt_if_unset WORK_POOL "Work pool name (e.g. CPU_pool)"
 if [[ -z "${WORK_QUEUE:-}" ]]; then
   read -r -p "Work queue name (optional, blank = all queues): " WORK_QUEUE < "$TTY_IN" || true
 fi
+# WORKER_LIMIT caps concurrent flow runs the worker will pick up (1 = serial)
+if [[ -z "${WORKER_LIMIT:-}" ]]; then
+  read -r -p "Concurrent run limit [1]: " WORKER_LIMIT < "$TTY_IN" || true
+  WORKER_LIMIT="${WORKER_LIMIT:-1}"
+fi
+if ! [[ "$WORKER_LIMIT" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: WORKER_LIMIT must be a positive integer (got '$WORKER_LIMIT')" >&2
+  exit 1
+fi
 
-echo "==> Install dir: $INSTALL_DIR"
-echo "==> Prefect API: $PREFECT_API_URL"
-echo "==> Work pool:   $WORK_POOL"
-echo "==> Work queue:  ${WORK_QUEUE:-<all>}"
+echo "==> Install dir:   $INSTALL_DIR"
+echo "==> Prefect API:   $PREFECT_API_URL"
+echo "==> Work pool:     $WORK_POOL"
+echo "==> Work queue:    ${WORK_QUEUE:-<all>}"
+echo "==> Worker limit:  $WORKER_LIMIT"
 
 # 1. Get repo into INSTALL_DIR
 if [[ -d "$INSTALL_DIR/.git" ]]; then
@@ -91,6 +101,7 @@ ENV_FILE="$INSTALL_DIR/.env"
   echo "PREFECT_API_URL=$PREFECT_API_URL"
   echo "WORK_POOL=$WORK_POOL"
   [[ -n "${WORK_QUEUE:-}" ]] && echo "WORK_QUEUE=$WORK_QUEUE"
+  echo "WORKER_LIMIT=$WORKER_LIMIT"
 } > "$ENV_FILE"
 echo "==> Wrote $ENV_FILE"
 
@@ -101,7 +112,7 @@ if ! command -v tmux >/dev/null 2>&1; then
 fi
 
 export PREFECT_API_URL
-WORKER_ARGS=(--pool "$WORK_POOL")
+WORKER_ARGS=(--pool "$WORK_POOL" --limit "$WORKER_LIMIT")
 if [[ -n "${WORK_QUEUE:-}" ]]; then
   WORKER_ARGS+=(--work-queue "$WORK_QUEUE")
 fi
