@@ -19,19 +19,28 @@ INSTALL_DIR="${PREFECT_SWEEP_MCP_HOME:-$HOME/.prefect_sweep_mcp}"
 REPO_URL="${PREFECT_SWEEP_MCP_REPO:-git@github.com:Suchun-sv/prefect_sweep_mcp.git}"
 BRANCH="${PREFECT_SWEEP_MCP_BRANCH:-main}"
 
+# Read prompts from /dev/tty so this works under `curl ... | bash`,
+# where stdin is the pipe (not the terminal).
+if [[ -r /dev/tty ]]; then
+  TTY_IN=/dev/tty
+else
+  TTY_IN=/dev/stdin
+fi
+
 prompt_if_unset() {
   local var_name="$1"
   local prompt_text="$2"
   local default_value="${3:-}"
+  local value=""
   if [[ -z "${!var_name:-}" ]]; then
     if [[ -n "$default_value" ]]; then
-      read -r -p "$prompt_text [$default_value]: " value
+      read -r -p "$prompt_text [$default_value]: " value < "$TTY_IN" || true
       value="${value:-$default_value}"
     else
-      read -r -p "$prompt_text: " value
+      read -r -p "$prompt_text: " value < "$TTY_IN" || true
     fi
     if [[ -z "$value" ]]; then
-      echo "ERROR: $var_name is required" >&2
+      echo "ERROR: $var_name is required (set it via env or run interactively)" >&2
       exit 1
     fi
     printf -v "$var_name" '%s' "$value"
@@ -43,7 +52,7 @@ prompt_if_unset PREFECT_API_URL "Prefect API URL (e.g. http://host:4200/api)"
 prompt_if_unset WORK_POOL "Work pool name (e.g. CPU_pool)"
 # WORK_QUEUE is optional — leave blank to listen on all queues in the pool
 if [[ -z "${WORK_QUEUE:-}" ]]; then
-  read -r -p "Work queue name (optional, blank = all queues): " WORK_QUEUE || true
+  read -r -p "Work queue name (optional, blank = all queues): " WORK_QUEUE < "$TTY_IN" || true
 fi
 
 echo "==> Install dir: $INSTALL_DIR"
