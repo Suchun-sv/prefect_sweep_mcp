@@ -152,7 +152,7 @@ That starts the FastMCP server defined in `prefect_sweep_mcp/server.py`.
 One-shot install (interactive — prompts for missing values):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Suchun-sv/prefect_sweep_mcp/main/scripts/install_worker.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Suchun-sv/prefect_sweep_mcp/b92ec52/scripts/install_worker.sh | bash
 ```
 
 Non-interactive — preset the values via env:
@@ -161,8 +161,11 @@ Non-interactive — preset the values via env:
 PREFECT_API_URL=http://your-prefect-host:4200/api \
 WORK_POOL=CPU_pool \
 WORK_QUEUE=practice \
-  bash <(curl -fsSL https://raw.githubusercontent.com/Suchun-sv/prefect_sweep_mcp/main/scripts/install_worker.sh)
+WORKER_LIMIT=1 \
+  bash <(curl -fsSL https://raw.githubusercontent.com/Suchun-sv/prefect_sweep_mcp/b92ec52/scripts/install_worker.sh)
 ```
+
+> The URL pins commit `b92ec52` so `raw.githubusercontent.com`'s CDN serves the exact file immediately. The `main`-pinned URL works too but can be cached for several minutes after a push.
 
 Variables read by the script:
 
@@ -171,6 +174,7 @@ Variables read by the script:
 | `PREFECT_API_URL` | yes | — | e.g. `http://host:4200/api` |
 | `WORK_POOL` | yes | — | e.g. `CPU_pool`, `GPU_pool` |
 | `WORK_QUEUE` | no | all queues | leave blank to listen on every queue in the pool |
+| `WORKER_LIMIT` | no | `1` | max concurrent flow runs the worker accepts; positive integer |
 | `PREFECT_SWEEP_MCP_HOME` | no | `~/.prefect_sweep_mcp` | install location |
 | `PREFECT_SWEEP_MCP_REPO` | no | `git@github.com:Suchun-sv/prefect_sweep_mcp.git` | override for fork/private mirror |
 | `PREFECT_SWEEP_MCP_BRANCH` | no | `main` | branch to check out |
