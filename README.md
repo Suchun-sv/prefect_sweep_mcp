@@ -188,7 +188,7 @@ Adds a new execution template at runtime.
 
 Required arguments: `name`, `deployment_name`, `repo_url`, `repo_local_path`, `work_pool`, `work_queue`, `default_cmd`.
 
-Optional: `description`, `default_branch`, `default_env`, `command_template`, `allowed_launch_overrides`, `allowed_tasks`, `overwrite` (default `False`), `persist` (default `True`, writes back to `templates/catalog.yaml`).
+Optional: `description`, `default_branch`, `job_variables` (free-form dict written into the deployment's `job_variables` block, e.g. `{"env": {"FOO": "bar"}, "working_dir": "/srv"}`), `command_template`, `allowed_launch_overrides`, `allowed_tasks`, `overwrite` (default `False`), `persist` (default `True`, writes back to `templates/catalog.yaml`).
 
 Rejects duplicates: refuses if a template with the same `name` already exists (unless `overwrite=True`) or if `deployment_name` is already used by a different template.
 

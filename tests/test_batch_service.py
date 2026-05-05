@@ -57,7 +57,7 @@ class BatchServiceTests(unittest.TestCase):
                 repo_url="https://github.com/DBgroup-Edinburgh/VectorBenchmark",
                 repo_local_path="~/github/VectorBenchmark",
                 default_branch="encode-all-beir",
-                default_env={},
+                job_variables={},
                 work_pool="GPU_pool",
                 work_queue="vectorbench",
                 allowed_queues=["vectorbench"],

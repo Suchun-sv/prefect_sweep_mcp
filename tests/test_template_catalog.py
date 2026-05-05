@@ -28,7 +28,7 @@ class TemplateCatalogTests(unittest.TestCase):
                 default_branch: main
                 work_pool: CPU_pool
                 work_queue: practice
-                default_env: {}
+                job_variables: {}
                 default_cmd: echo hello
                 allowed_launch_overrides: []
                 allowed_tasks: [Practice]
@@ -50,7 +50,7 @@ class TemplateCatalogTests(unittest.TestCase):
                 default_branch: main
                 work_pool: CPU_pool
                 work_queue: practice
-                default_env: {}
+                job_variables: {}
                 default_cmd: echo one
               - name: duplicate
                 description: Two
@@ -60,7 +60,7 @@ class TemplateCatalogTests(unittest.TestCase):
                 default_branch: main
                 work_pool: CPU_pool
                 work_queue: practice
-                default_env: {}
+                job_variables: {}
                 default_cmd: echo two
             """
         )

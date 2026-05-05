@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from mcp.server.fastmcp import FastMCP
 
 from .batch_service import BatchService
@@ -26,7 +28,7 @@ for template in load_template_catalog():
             repo_url=template.repo_url,
             repo_local_path=template.repo_local_path,
             default_branch=template.default_branch,
-            default_env=template.default_env,
+            job_variables=template.job_variables,
             work_pool=template.work_pool,
             work_queue=template.work_queue,
             default_cmd=template.default_cmd,
@@ -105,8 +107,8 @@ def get_run_status(flow_run_id: str) -> dict:
 
 
 @mcp.tool()
-def get_run_logs(flow_run_id: str, limit: int = 200) -> dict:
-    return operator_service.get_run_logs(flow_run_id, limit=limit).model_dump()
+def get_run_logs(flow_run_id: str, limit: int = 50, tail: bool = True) -> dict:
+    return operator_service.get_run_logs(flow_run_id, limit=limit, tail=tail).model_dump()
 
 
 @mcp.tool()
@@ -120,7 +122,7 @@ def register_template(
     default_cmd: str,
     description: str = "",
     default_branch: str | None = None,
-    default_env: dict[str, str] | None = None,
+    job_variables: dict[str, Any] | None = None,
     command_template: str | None = None,
     allowed_launch_overrides: list[str] | None = None,
     allowed_tasks: list[str] | None = None,
@@ -137,7 +139,7 @@ def register_template(
         default_cmd=default_cmd,
         description=description,
         default_branch=default_branch,
-        default_env=default_env,
+        job_variables=job_variables,
         command_template=command_template,
         allowed_launch_overrides=allowed_launch_overrides,
         allowed_tasks=allowed_tasks,

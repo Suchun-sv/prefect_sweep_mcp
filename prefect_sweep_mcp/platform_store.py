@@ -40,7 +40,7 @@ class PlatformStore:
                     repo_url TEXT NOT NULL,
                     repo_local_path TEXT NOT NULL,
                     default_branch TEXT,
-                    default_env_json TEXT NOT NULL,
+                    job_variables_json TEXT NOT NULL,
                     work_pool TEXT NOT NULL,
                     work_queue TEXT NOT NULL,
                     default_cmd TEXT NOT NULL,
@@ -77,7 +77,7 @@ class PlatformStore:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO execution_templates
-                (id, name, project_id, deployment_name, repo_url, repo_local_path, default_branch, default_env_json,
+                (id, name, project_id, deployment_name, repo_url, repo_local_path, default_branch, job_variables_json,
                  work_pool, work_queue, default_cmd, command_template, description, allowed_queues_json,
                  allowed_launch_overrides_json, allowed_tasks_json)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -90,7 +90,7 @@ class PlatformStore:
                     template.repo_url,
                     template.repo_local_path,
                     template.default_branch,
-                    json.dumps(template.default_env),
+                    json.dumps(template.job_variables),
                     template.work_pool,
                     template.work_queue,
                     template.default_cmd,
@@ -207,7 +207,7 @@ class PlatformStore:
             repo_url=row["repo_url"],
             repo_local_path=row["repo_local_path"],
             default_branch=row["default_branch"],
-            default_env=json.loads(row["default_env_json"]),
+            job_variables=json.loads(row["job_variables_json"]),
             work_pool=row["work_pool"],
             work_queue=row["work_queue"],
             default_cmd=row["default_cmd"],

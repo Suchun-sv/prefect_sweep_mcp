@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 import yaml
 from pydantic import BaseModel, Field, ValidationError
@@ -25,7 +25,7 @@ class RepoTemplate(BaseModel):
     default_branch: str | None = None
     work_pool: str
     work_queue: str
-    default_env: dict[str, str] = Field(default_factory=dict)
+    job_variables: dict[str, Any] = Field(default_factory=dict)
     default_cmd: str
     command_template: str | None = None
     allowed_launch_overrides: list[str] = Field(default_factory=list)
@@ -98,7 +98,7 @@ def render_prefect_yaml(templates: Iterable[RepoTemplate], control_repo_url: str
                 "work_pool": {
                     "name": template.work_pool,
                     "work_queue_name": template.work_queue,
-                    "job_variables": {"env": template.default_env},
+                    "job_variables": dict(template.job_variables),
                 },
             }
         )

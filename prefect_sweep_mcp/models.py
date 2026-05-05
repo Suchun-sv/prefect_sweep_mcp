@@ -24,7 +24,7 @@ class ExecutionTemplate(BaseModel):
     repo_url: str
     repo_local_path: str
     default_branch: str | None = None
-    default_env: dict[str, str] = Field(default_factory=dict)
+    job_variables: dict[str, Any] = Field(default_factory=dict)
     work_pool: str
     work_queue: str
     default_cmd: str

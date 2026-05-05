@@ -4,7 +4,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 import yaml
 
@@ -188,8 +188,8 @@ class OperatorService:
             detail=detail,
         )
 
-    def get_run_logs(self, flow_run_id: str, limit: int = 200) -> RunLogsResponse:
-        return RunLogsResponse(flow_run_id=flow_run_id, logs=self.prefect.get_run_logs(flow_run_id, limit=limit))
+    def get_run_logs(self, flow_run_id: str, limit: int = 50, tail: bool = True) -> RunLogsResponse:
+        return RunLogsResponse(flow_run_id=flow_run_id, logs=self.prefect.get_run_logs(flow_run_id, limit=limit, tail=tail))
 
     def get_template_runtime_requirements(self, template_name: str) -> TemplateRuntimeRequirementsResponse:
         template = self._get_template(template_name)
@@ -216,7 +216,7 @@ class OperatorService:
         default_cmd: str,
         description: str = "",
         default_branch: str | None = None,
-        default_env: dict[str, str] | None = None,
+        job_variables: dict[str, Any] | None = None,
         command_template: str | None = None,
         allowed_launch_overrides: list[str] | None = None,
         allowed_tasks: list[str] | None = None,
@@ -232,7 +232,7 @@ class OperatorService:
             default_branch=default_branch,
             work_pool=work_pool,
             work_queue=work_queue,
-            default_env=default_env or {},
+            job_variables=job_variables or {},
             default_cmd=default_cmd,
             command_template=command_template,
             allowed_launch_overrides=allowed_launch_overrides or [],
@@ -261,7 +261,7 @@ class OperatorService:
                 repo_url=repo_template.repo_url,
                 repo_local_path=repo_template.repo_local_path,
                 default_branch=repo_template.default_branch,
-                default_env=repo_template.default_env,
+                job_variables=repo_template.job_variables,
                 work_pool=repo_template.work_pool,
                 work_queue=repo_template.work_queue,
                 default_cmd=repo_template.default_cmd,

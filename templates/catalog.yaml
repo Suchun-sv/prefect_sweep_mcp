@@ -1,57 +1,105 @@
 templates:
-  - name: practice_101
-    description: Practice workload for the prefect_101 repository.
-    deployment_name: practice_101
-    repo_url: https://github.com/Suchun-sv/prefect_101
-    repo_local_path: ~/github/prefect_101
-    default_branch: main
-    work_pool: CPU_pool
-    work_queue: practice
-    default_env:
-      TEST: "323"
-      SDDJI: "32134"
-    default_cmd: uv run practice env
-    allowed_launch_overrides: []
-    allowed_tasks:
-      - Practice
-  - name: vectorbench_embedding_shards
-    description: Shard-based VectorBenchmark embedding generation template.
-    deployment_name: vectortranslation
-    repo_url: https://github.com/DBgroup-Edinburgh/VectorBenchmark
-    repo_local_path: ~/github/VectorBenchmark
-    default_branch: encode-all-beir
-    work_pool: GPU_pool
-    work_queue: vectortranslation
-    default_env: {}
-    default_cmd: >-
-      uv run vectorbench embedding generate --model gte --dataset QuoraRetrieval
-      --source mteb --data-path ./data/raw/mteb/ --embedding-path ./data/processed/embeddings/
-      --embedding-model-path ./models --embedding-cache-path ./cache --batch-size 32
-      --total-workers 1 --worker-id 0 --no-upload
-    command_template: >-
-      uv run vectorbench embedding generate --model {model} --dataset {dataset}
-      --source {source} --data-path {data_path} --embedding-path {embedding_path}
-      --embedding-model-path {embedding_model_path} --embedding-cache-path {embedding_cache_path}
-      --batch-size {batch_size} --total-workers {total_workers} --worker-id {worker_id} --no-upload
-    allowed_launch_overrides:
-      - model
-      - dataset
-      - source
-      - data_path
-      - embedding_path
-      - embedding_model_path
-      - embedding_cache_path
-      - batch_size
-  - name: scratch_hello
-    description: Minimal local scratch repo for end-to-end Prefect and MCP validation.
-    deployment_name: scratch_hello
-    repo_url: /tmp/prefect_scratch_repo
-    repo_local_path: ~/github/prefect_scratch_repo
-    default_branch: main
-    work_pool: CPU_pool
-    work_queue: practice
-    default_env: {}
-    default_cmd: uv run python -m myapp hello
-    command_template: uv run python -m myapp {mode}
-    allowed_launch_overrides:
-      - mode
+- name: practice_101
+  description: Practice workload for the prefect_101 repository.
+  deployment_name: practice_101
+  repo_url: https://github.com/Suchun-sv/prefect_101
+  repo_local_path: ~/github/prefect_101
+  default_branch: main
+  work_pool: CPU_pool
+  work_queue: practice
+  job_variables:
+    env:
+      TEST: '323'
+      SDDJI: '32134'
+  default_cmd: uv run practice env
+  allowed_launch_overrides: []
+  allowed_tasks:
+  - Practice
+- name: vectorbench_embedding_shards
+  description: Shard-based VectorBenchmark embedding generation template.
+  deployment_name: vectortranslation
+  repo_url: https://github.com/DBgroup-Edinburgh/VectorBenchmark
+  repo_local_path: ~/github/VectorBenchmark
+  default_branch: encode-all-beir
+  work_pool: GPU_pool
+  work_queue: vectortranslation
+  job_variables: {}
+  default_cmd: uv run vectorbench embedding generate --model gte --dataset QuoraRetrieval
+    --source mteb --data-path ./data/raw/mteb/ --embedding-path ./data/processed/embeddings/
+    --embedding-model-path ./models --embedding-cache-path ./cache --batch-size 32
+    --total-workers 1 --worker-id 0 --no-upload
+  command_template: uv run vectorbench embedding generate --model {model} --dataset
+    {dataset} --source {source} --data-path {data_path} --embedding-path {embedding_path}
+    --embedding-model-path {embedding_model_path} --embedding-cache-path {embedding_cache_path}
+    --batch-size {batch_size} --total-workers {total_workers} --worker-id {worker_id}
+    --no-upload
+  allowed_launch_overrides:
+  - model
+  - dataset
+  - source
+  - data_path
+  - embedding_path
+  - embedding_model_path
+  - embedding_cache_path
+  - batch_size
+- name: scratch_hello
+  description: Minimal local scratch repo for end-to-end Prefect and MCP validation.
+  deployment_name: scratch_hello
+  repo_url: /tmp/prefect_scratch_repo
+  repo_local_path: ~/github/prefect_scratch_repo
+  default_branch: main
+  work_pool: CPU_pool
+  work_queue: practice
+  job_variables: {}
+  default_cmd: uv run python -m myapp hello
+  command_template: uv run python -m myapp {mode}
+  allowed_launch_overrides:
+  - mode
+- name: mnist_demo
+  description: Tiny MNIST classifier for end-to-end MCP/Prefect smoke tests.
+  deployment_name: mnist_demo
+  repo_url: git@github.com:Suchun-sv/MNIST-demo.git
+  repo_local_path: ~/github/MNIST-demo
+  default_branch: main
+  work_pool: GPU_pool
+  work_queue: default
+  job_variables: {}
+  default_cmd: uv run python train.py --epochs 100
+  command_template: null
+  allowed_launch_overrides: []
+  allowed_tasks: []
+- name: mcp_generating
+  description: VectorBenchmark gte/QuoraRetrieval embedding generation, sharded across
+    100 workers.
+  deployment_name: mcp-generating
+  repo_url: git@github.com:DBgroup-Edinburgh/VectorBenchmark.git
+  repo_local_path: ~/github/VectorBenchmark
+  default_branch: main
+  work_pool: GPU_pool
+  work_queue: default
+  job_variables:
+    env:
+      HF_TOKEN: ""
+      NOCO_URL: http://frp-old.com:54858/
+      NOCO_API_TOKEN: ""
+  default_cmd: uv run vectorbench embedding generate --model gte --dataset QuoraRetrieval
+    --source mteb --data-path ./data/raw/mteb/ --embedding-path ./data/processed/embeddings/
+    --embedding-model-path ./models --embedding-cache-path ./cache --batch-size 32
+    --total-workers 100 --worker-id 0 --no-upload
+  command_template: uv run vectorbench embedding generate --model {model} --dataset
+    {dataset} --source {source} --data-path {data_path} --embedding-path {embedding_path}
+    --embedding-model-path {embedding_model_path} --embedding-cache-path {embedding_cache_path}
+    --batch-size {batch_size} --total-workers {total_workers} --worker-id {worker_id}
+    --no-upload
+  allowed_launch_overrides:
+  - model
+  - dataset
+  - source
+  - data_path
+  - embedding_path
+  - embedding_model_path
+  - embedding_cache_path
+  - batch_size
+  - total_workers
+  - worker_id
+  allowed_tasks: []

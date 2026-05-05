@@ -86,7 +86,7 @@ class OperatorServiceTests(unittest.TestCase):
                 repo_url="https://github.com/Suchun-sv/prefect_101",
                 repo_local_path="~/github/prefect_101",
                 default_branch="main",
-                default_env={},
+                job_variables={},
                 work_pool="CPU_pool",
                 work_queue="practice",
                 default_cmd="uv run practice env",

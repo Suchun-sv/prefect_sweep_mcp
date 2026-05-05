@@ -93,8 +93,14 @@ class HTTPPrefectAdapter:
     def cancel_flow_run(self, flow_run_id: str) -> None:
         self._post(f"/flow_runs/{flow_run_id}/set_state", {"name": "Cancelling"})
 
-    def get_run_logs(self, flow_run_id: str, limit: int = 200) -> list[str]:
-        records = self._post("/logs/filter", {"logs": {"flow_run_id": {"any_": [flow_run_id]}}, "limit": limit})
+    def get_run_logs(self, flow_run_id: str, limit: int = 50, tail: bool = True) -> list[str]:
+        payload: dict[str, Any] = {"logs": {"flow_run_id": {"any_": [flow_run_id]}}, "limit": limit}
+        if tail:
+            payload["sort"] = "TIMESTAMP_DESC"
+        records = self._post("/logs/filter", payload)
         if not isinstance(records, list):
             return []
-        return [record.get("message", "") for record in records]
+        messages = [record.get("message", "") for record in records]
+        if tail:
+            messages.reverse()
+        return messages
