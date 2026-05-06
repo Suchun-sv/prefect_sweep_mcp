@@ -63,12 +63,20 @@ if ! [[ "$WORKER_LIMIT" =~ ^[1-9][0-9]*$ ]]; then
   echo "ERROR: WORKER_LIMIT must be a positive integer (got '$WORKER_LIMIT')" >&2
   exit 1
 fi
+# GITHUB_TOKEN is optional — only needed if the worker has to clone private
+# repos (or private transitive deps via uv). When set, we install three
+# git config insteadOf rules so any git@github.com:/ssh:/git+ssh: URL is
+# transparently rewritten to https://x-access-token:<token>@github.com/.
+if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+  read -r -p "GitHub PAT for private repos (optional, blank to skip): " GITHUB_TOKEN < "$TTY_IN" || true
+fi
 
 echo "==> Install dir:   $INSTALL_DIR"
 echo "==> Prefect API:   $PREFECT_API_URL"
 echo "==> Work pool:     $WORK_POOL"
 echo "==> Work queue:    ${WORK_QUEUE:-<all>}"
 echo "==> Worker limit:  $WORKER_LIMIT"
+echo "==> GitHub token:  ${GITHUB_TOKEN:+<set>}${GITHUB_TOKEN:-<unset>}"
 
 # 1. Get repo into INSTALL_DIR
 if [[ -d "$INSTALL_DIR/.git" ]]; then
@@ -90,6 +98,18 @@ if ! command -v uv >/dev/null 2>&1; then
   export PATH="$HOME/.local/bin:$PATH"
 fi
 
+# 2b. If a GitHub PAT is provided, rewrite SSH-style github URLs to HTTPS+token
+# so uv (and anything else calling git) can fetch private deps without keys.
+if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  echo "==> Configuring git insteadOf rules for github.com (token auth)"
+  rewrite="https://x-access-token:${GITHUB_TOKEN}@github.com/"
+  git config --global "url.${rewrite}.insteadOf" "git@github.com:"
+  git config --global --add "url.${rewrite}.insteadOf" "ssh://git@github.com/"
+  git config --global --add "url.${rewrite}.insteadOf" "git+ssh://git@github.com/"
+  # uv caches failed clones — wipe so the next sync retries with the new auth.
+  rm -rf "$HOME/.cache/uv/git-v0" 2>/dev/null || true
+fi
+
 # 3. Create venv + install dependencies from pyproject + uv.lock
 cd "$INSTALL_DIR"
 echo "==> uv sync"
@@ -102,7 +122,9 @@ ENV_FILE="$INSTALL_DIR/.env"
   echo "WORK_POOL=$WORK_POOL"
   [[ -n "${WORK_QUEUE:-}" ]] && echo "WORK_QUEUE=$WORK_QUEUE"
   echo "WORKER_LIMIT=$WORKER_LIMIT"
+  [[ -n "${GITHUB_TOKEN:-}" ]] && echo "GITHUB_TOKEN=$GITHUB_TOKEN"
 } > "$ENV_FILE"
+chmod 600 "$ENV_FILE"
 echo "==> Wrote $ENV_FILE"
 
 # 5. Start the worker inside a tmux session
