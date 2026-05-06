@@ -154,6 +154,28 @@ def list_runs_in_deployment(template_name: str, limit: int = 50) -> dict:
 
 
 @mcp.tool()
+def retry_run(flow_run_id: str) -> dict:
+    """Re-schedule a failed/cancelled flow run by setting its state to Scheduled (force=True)."""
+    return operator_service.retry_run(flow_run_id).model_dump()
+
+
+@mcp.tool()
+def list_flow_runs(
+    template_name: str | None = None,
+    states: list[str] | None = None,
+    since: str | None = None,
+    limit: int = 50,
+) -> dict:
+    """List flow runs, optionally filtered by template (deployment), state names, and earliest expected start time (ISO 8601)."""
+    return operator_service.list_flow_runs(
+        template_name=template_name,
+        states=states,
+        since=since,
+        limit=limit,
+    ).model_dump()
+
+
+@mcp.tool()
 def register_template(
     name: str,
     deployment_name: str,

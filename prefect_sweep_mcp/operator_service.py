@@ -24,10 +24,13 @@ from .models import (
     DeploymentRunSummary,
     ExecutionTemplate,
     CancelRunResponse,
+    FlowRunSummary,
     GeneratedArtifactGitignoreResponse,
     GeneratedDeploymentConfigResponse,
+    ListFlowRunsResponse,
     ListRunsInDeploymentResponse,
     RegisterTemplateResponse,
+    RetryRunResponse,
     RunLogsResponse,
     RunStatusResponse,
     SubmitRunResponse,
@@ -260,6 +263,44 @@ class OperatorService:
             deployment_id=deployment_id,
             runs=runs,
         )
+
+    def retry_run(self, flow_run_id: str) -> RetryRunResponse:
+        self.prefect.retry_flow_run(flow_run_id)
+        self.store.update_shard_status(flow_run_id, "submitted")
+        flow_run = self.prefect.get_flow_run(flow_run_id)
+        state = flow_run.get("state_name") or (flow_run.get("state") or {}).get("name") or "Scheduled"
+        return RetryRunResponse(flow_run_id=flow_run_id, state=state)
+
+    def list_flow_runs(
+        self,
+        template_name: str | None = None,
+        states: list[str] | None = None,
+        since: str | None = None,
+        limit: int = 50,
+    ) -> ListFlowRunsResponse:
+        deployment_ids: list[str] | None = None
+        if template_name:
+            deployment_ids = [self._resolve_deployment_id(template_name)]
+        records = self.prefect.filter_flow_runs(
+            deployment_ids=deployment_ids,
+            states=states,
+            since=since,
+            limit=limit,
+        )
+        runs = [
+            FlowRunSummary(
+                flow_run_id=r.get("id", ""),
+                name=r.get("name"),
+                state=r.get("state_name") or (r.get("state") or {}).get("name") or "unknown",
+                deployment_id=r.get("deployment_id"),
+                expected_start_time=r.get("expected_start_time"),
+                start_time=r.get("start_time"),
+                end_time=r.get("end_time"),
+            )
+            for r in records
+            if r.get("id")
+        ]
+        return ListFlowRunsResponse(runs=runs)
 
     def _resolve_deployment_id(self, template_name: str) -> str:
         template = self._get_template(template_name)

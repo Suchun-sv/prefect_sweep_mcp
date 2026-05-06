@@ -78,6 +78,18 @@ class FakePrefectAdapter:
     def list_flow_runs_for_deployment(self, deployment_id: str, limit: int = 50):
         return [r for r in self.runs.values() if r.get("deployment_id") == deployment_id][:limit]
 
+    def retry_flow_run(self, flow_run_id: str):
+        self.runs[flow_run_id]["state_name"] = "Scheduled"
+        return self.runs[flow_run_id]
+
+    def filter_flow_runs(self, deployment_ids=None, states=None, since=None, limit=50):
+        result = list(self.runs.values())
+        if deployment_ids:
+            result = [r for r in result if r.get("deployment_id") in deployment_ids]
+        if states:
+            result = [r for r in result if r.get("state_name") in states]
+        return result[:limit]
+
 
 class OperatorServiceTests(unittest.TestCase):
     def setUp(self):
@@ -258,6 +270,32 @@ class OperatorServiceTests(unittest.TestCase):
         for run in response.runs:
             self.assertTrue(run.flow_run_id.startswith("run-"))
             self.assertEqual(run.state, "Scheduled")
+
+
+    def test_retry_run_sets_state_to_scheduled(self):
+        submit = self.service.submit_run("practice_101")
+        self.prefect.runs[submit.flow_run_id]["state_name"] = "Failed"
+
+        response = self.service.retry_run(submit.flow_run_id)
+
+        self.assertEqual(response.flow_run_id, submit.flow_run_id)
+        self.assertEqual(response.state, "Scheduled")
+        self.assertEqual(self.prefect.runs[submit.flow_run_id]["state_name"], "Scheduled")
+
+    def test_list_flow_runs_filters_by_state_and_template(self):
+        a = self.service.submit_run("practice_101")
+        b = self.service.submit_run("practice_101")
+        self.prefect.runs[a.flow_run_id]["state_name"] = "Failed"
+        self.prefect.runs[b.flow_run_id]["state_name"] = "Completed"
+
+        all_runs = self.service.list_flow_runs(template_name="practice_101")
+        self.assertEqual(len(all_runs.runs), 2)
+
+        failed_only = self.service.list_flow_runs(template_name="practice_101", states=["Failed"])
+        self.assertEqual(len(failed_only.runs), 1)
+        self.assertEqual(failed_only.runs[0].flow_run_id, a.flow_run_id)
+        self.assertEqual(failed_only.runs[0].state, "Failed")
+        self.assertEqual(failed_only.runs[0].deployment_id, "dep-1")
 
 
 if __name__ == "__main__":

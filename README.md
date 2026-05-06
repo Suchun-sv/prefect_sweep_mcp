@@ -7,7 +7,7 @@ It is meant to give an agent a safer control surface than raw Prefect objects. I
 - **Onboard a new repo at runtime**: `register_template`, `unregister_template`
 - **Inspect**: `list_templates`, `get_template`, `list_workers`, `list_work_pools`, `list_work_queues`, `list_deployments`, `get_template_runtime_requirements`
 - **Deploy lifecycle**: `generate_deployment_config`, `deploy_template`, `deploy_all_templates`, `get_template_deploy_status`, `pause_deployment`, `resume_deployment`, `delete_deployment`
-- **Run**: `submit_run`, `submit_batch`, `get_run_status`, `get_run_logs`, `cancel_run`, `list_runs_in_deployment`
+- **Run**: `submit_run`, `submit_batch`, `get_run_status`, `get_run_logs`, `cancel_run`, `retry_run`, `list_runs_in_deployment`, `list_flow_runs`
 - **Batch ops**: `get_batch_status`, `retry_failed_shards`, `cancel_batch`
 
 Templates are seeded from `templates/catalog.yaml` at startup, and additional templates can be added at runtime via `register_template` (which also persists back to the catalog by default).
@@ -343,6 +343,21 @@ Pauses or resumes the Prefect deployment behind a template. While paused, new fl
 ### `list_runs_in_deployment`
 
 Lists recent flow runs for the deployment behind a template (default `limit=50`, sorted by expected start time descending). Each entry returns `flow_run_id`, `state`, and timing fields. Useful for inspecting runs that were *not* submitted through this MCP (e.g. retries from the Prefect UI).
+
+### `retry_run`
+
+Re-schedules a single flow run by setting its state to `Scheduled` with `force=True`. Works for runs in any terminal state (`Failed`, `Crashed`, `Cancelled`). The flow run id is preserved — Prefect tracks the retry as a new attempt on the same id.
+
+### `list_flow_runs`
+
+Cross-deployment flow run query. All arguments optional:
+
+- `template_name` — limit to one template's deployment.
+- `states` — list of state names to match (e.g. `["Failed", "Crashed"]`).
+- `since` — ISO 8601 timestamp; only runs whose `expected_start_time` is after this are returned.
+- `limit` — default 50.
+
+Returns a flat list of `FlowRunSummary` (`flow_run_id`, `state`, `deployment_id`, timing fields). Pair with `retry_run` to fan-out a recovery sweep across recent failures.
 
 ## Database Layout
 

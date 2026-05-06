@@ -19,6 +19,14 @@ class PrefectAdapter(Protocol):
     def pause_deployment(self, deployment_id: str) -> None: ...
     def resume_deployment(self, deployment_id: str) -> None: ...
     def list_flow_runs_for_deployment(self, deployment_id: str, limit: int = 50) -> list[dict[str, Any]]: ...
+    def retry_flow_run(self, flow_run_id: str) -> dict[str, Any]: ...
+    def filter_flow_runs(
+        self,
+        deployment_ids: list[str] | None = None,
+        states: list[str] | None = None,
+        since: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]: ...
 
 
 class HTTPPrefectAdapter:
@@ -121,6 +129,34 @@ class HTTPPrefectAdapter:
             "limit": limit,
             "sort": "EXPECTED_START_TIME_DESC",
         }
+        data = self._post("/flow_runs/filter", payload)
+        return data if isinstance(data, list) else []
+
+    def retry_flow_run(self, flow_run_id: str) -> dict[str, Any]:
+        payload = {
+            "state": {"type": "SCHEDULED", "name": "AwaitingRetry"},
+            "force": True,
+        }
+        result = self._post(f"/flow_runs/{flow_run_id}/set_state", payload)
+        return result if isinstance(result, dict) else {}
+
+    def filter_flow_runs(
+        self,
+        deployment_ids: list[str] | None = None,
+        states: list[str] | None = None,
+        since: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        flow_runs_filter: dict[str, Any] = {}
+        if deployment_ids:
+            flow_runs_filter["deployment_id"] = {"any_": deployment_ids}
+        if states:
+            flow_runs_filter["state"] = {"name": {"any_": states}}
+        if since:
+            flow_runs_filter["expected_start_time"] = {"after_": since}
+        payload: dict[str, Any] = {"limit": limit, "sort": "EXPECTED_START_TIME_DESC"}
+        if flow_runs_filter:
+            payload["flow_runs"] = flow_runs_filter
         data = self._post("/flow_runs/filter", payload)
         return data if isinstance(data, list) else []
 

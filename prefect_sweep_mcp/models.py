@@ -204,6 +204,25 @@ class ListRunsInDeploymentResponse(BaseModel):
     runs: list[DeploymentRunSummary]
 
 
+class FlowRunSummary(BaseModel):
+    flow_run_id: str
+    name: str | None = None
+    state: str
+    deployment_id: str | None = None
+    expected_start_time: str | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+
+
+class ListFlowRunsResponse(BaseModel):
+    runs: list[FlowRunSummary]
+
+
+class RetryRunResponse(BaseModel):
+    flow_run_id: str
+    state: str
+
+
 class TemplateRuntimeRequirementsResponse(BaseModel):
     template_name: str
     deployment_name: str
