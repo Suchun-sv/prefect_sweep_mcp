@@ -14,6 +14,11 @@ class PrefectAdapter(Protocol):
     def get_flow_run(self, flow_run_id: str) -> dict[str, Any]: ...
     def cancel_flow_run(self, flow_run_id: str) -> None: ...
     def get_run_logs(self, flow_run_id: str, limit: int = 200) -> list[str]: ...
+    def list_deployments(self) -> list[dict[str, Any]]: ...
+    def delete_deployment(self, deployment_id: str) -> None: ...
+    def pause_deployment(self, deployment_id: str) -> None: ...
+    def resume_deployment(self, deployment_id: str) -> None: ...
+    def list_flow_runs_for_deployment(self, deployment_id: str, limit: int = 50) -> list[dict[str, Any]]: ...
 
 
 class HTTPPrefectAdapter:
@@ -29,6 +34,10 @@ class HTTPPrefectAdapter:
         response = requests.get(f"{self.api_url}{path}", timeout=30)
         response.raise_for_status()
         return response.json()
+
+    def _delete(self, path: str) -> None:
+        response = requests.delete(f"{self.api_url}{path}", timeout=30)
+        response.raise_for_status()
 
     def list_work_pools(self) -> list[dict[str, Any]]:
         data = self._post("/work_pools/filter", {})
@@ -92,6 +101,28 @@ class HTTPPrefectAdapter:
 
     def cancel_flow_run(self, flow_run_id: str) -> None:
         self._post(f"/flow_runs/{flow_run_id}/set_state", {"name": "Cancelling"})
+
+    def list_deployments(self) -> list[dict[str, Any]]:
+        data = self._post("/deployments/filter", {})
+        return data if isinstance(data, list) else []
+
+    def delete_deployment(self, deployment_id: str) -> None:
+        self._delete(f"/deployments/{deployment_id}")
+
+    def pause_deployment(self, deployment_id: str) -> None:
+        self._post(f"/deployments/{deployment_id}/pause_deployment", {})
+
+    def resume_deployment(self, deployment_id: str) -> None:
+        self._post(f"/deployments/{deployment_id}/resume_deployment", {})
+
+    def list_flow_runs_for_deployment(self, deployment_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        payload = {
+            "flow_runs": {"deployment_id": {"any_": [deployment_id]}},
+            "limit": limit,
+            "sort": "EXPECTED_START_TIME_DESC",
+        }
+        data = self._post("/flow_runs/filter", payload)
+        return data if isinstance(data, list) else []
 
     def get_run_logs(self, flow_run_id: str, limit: int = 50, tail: bool = True) -> list[str]:
         payload: dict[str, Any] = {"logs": {"flow_run_id": {"any_": [flow_run_id]}}, "limit": limit}

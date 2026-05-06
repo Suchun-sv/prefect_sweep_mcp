@@ -181,6 +181,29 @@ class UnregisterTemplateResponse(BaseModel):
     removed_from_catalog: bool
 
 
+class DeploymentMutationResponse(BaseModel):
+    template_name: str
+    deployment_name: str
+    deployment_id: str
+    action: str
+
+
+class DeploymentRunSummary(BaseModel):
+    flow_run_id: str
+    name: str | None = None
+    state: str
+    expected_start_time: str | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+
+
+class ListRunsInDeploymentResponse(BaseModel):
+    template_name: str
+    deployment_name: str
+    deployment_id: str
+    runs: list[DeploymentRunSummary]
+
+
 class TemplateRuntimeRequirementsResponse(BaseModel):
     template_name: str
     deployment_name: str

@@ -124,6 +124,36 @@ def cancel_batch(batch_id: str) -> dict:
 
 
 @mcp.tool()
+def list_deployments() -> list[dict]:
+    """Return raw Prefect deployments visible to the configured API."""
+    return operator_service.list_deployments()
+
+
+@mcp.tool()
+def delete_deployment(template_name: str) -> dict:
+    """Delete the Prefect deployment associated with a template (template stays registered)."""
+    return operator_service.delete_deployment(template_name).model_dump()
+
+
+@mcp.tool()
+def pause_deployment(template_name: str) -> dict:
+    """Pause the Prefect deployment so new flow runs are not picked up."""
+    return operator_service.pause_deployment(template_name).model_dump()
+
+
+@mcp.tool()
+def resume_deployment(template_name: str) -> dict:
+    """Resume a paused Prefect deployment."""
+    return operator_service.resume_deployment(template_name).model_dump()
+
+
+@mcp.tool()
+def list_runs_in_deployment(template_name: str, limit: int = 50) -> dict:
+    """List recent flow runs for the deployment behind a template."""
+    return operator_service.list_runs_in_deployment(template_name, limit=limit).model_dump()
+
+
+@mcp.tool()
 def register_template(
     name: str,
     deployment_name: str,

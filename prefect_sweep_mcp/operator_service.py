@@ -20,10 +20,13 @@ from template_catalog import (
 from .config import MCPConfig
 from .models import (
     DeployTemplateResponse,
+    DeploymentMutationResponse,
+    DeploymentRunSummary,
     ExecutionTemplate,
     CancelRunResponse,
     GeneratedArtifactGitignoreResponse,
     GeneratedDeploymentConfigResponse,
+    ListRunsInDeploymentResponse,
     RegisterTemplateResponse,
     RunLogsResponse,
     RunStatusResponse,
@@ -198,6 +201,75 @@ class OperatorService:
         flow_run = self.prefect.get_flow_run(flow_run_id)
         state = flow_run.get("state_name") or flow_run.get("state", {}).get("name") or "Cancelling"
         return CancelRunResponse(flow_run_id=flow_run_id, state=state)
+
+    def list_deployments(self) -> list[dict]:
+        return self.prefect.list_deployments()
+
+    def delete_deployment(self, template_name: str) -> DeploymentMutationResponse:
+        deployment_id = self._resolve_deployment_id(template_name)
+        self.prefect.delete_deployment(deployment_id)
+        template = self._get_template(template_name)
+        return DeploymentMutationResponse(
+            template_name=template.name,
+            deployment_name=template.deployment_name,
+            deployment_id=deployment_id,
+            action="deleted",
+        )
+
+    def pause_deployment(self, template_name: str) -> DeploymentMutationResponse:
+        deployment_id = self._resolve_deployment_id(template_name)
+        self.prefect.pause_deployment(deployment_id)
+        template = self._get_template(template_name)
+        return DeploymentMutationResponse(
+            template_name=template.name,
+            deployment_name=template.deployment_name,
+            deployment_id=deployment_id,
+            action="paused",
+        )
+
+    def resume_deployment(self, template_name: str) -> DeploymentMutationResponse:
+        deployment_id = self._resolve_deployment_id(template_name)
+        self.prefect.resume_deployment(deployment_id)
+        template = self._get_template(template_name)
+        return DeploymentMutationResponse(
+            template_name=template.name,
+            deployment_name=template.deployment_name,
+            deployment_id=deployment_id,
+            action="resumed",
+        )
+
+    def list_runs_in_deployment(self, template_name: str, limit: int = 50) -> ListRunsInDeploymentResponse:
+        deployment_id = self._resolve_deployment_id(template_name)
+        template = self._get_template(template_name)
+        records = self.prefect.list_flow_runs_for_deployment(deployment_id, limit=limit)
+        runs = [
+            DeploymentRunSummary(
+                flow_run_id=r.get("id", ""),
+                name=r.get("name"),
+                state=r.get("state_name") or (r.get("state") or {}).get("name") or "unknown",
+                expected_start_time=r.get("expected_start_time"),
+                start_time=r.get("start_time"),
+                end_time=r.get("end_time"),
+            )
+            for r in records
+            if r.get("id")
+        ]
+        return ListRunsInDeploymentResponse(
+            template_name=template.name,
+            deployment_name=template.deployment_name,
+            deployment_id=deployment_id,
+            runs=runs,
+        )
+
+    def _resolve_deployment_id(self, template_name: str) -> str:
+        template = self._get_template(template_name)
+        deployment = self.prefect.get_deployment_by_name(template.deployment_name)
+        deployment_id = deployment.get("id")
+        if not deployment_id:
+            raise RuntimeError(
+                f"Prefect did not return an id for deployment {template.deployment_name!r}"
+            )
+        return deployment_id
 
     def get_template_runtime_requirements(self, template_name: str) -> TemplateRuntimeRequirementsResponse:
         template = self._get_template(template_name)

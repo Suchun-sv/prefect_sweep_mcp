@@ -51,6 +51,33 @@ class FakePrefectAdapter:
     def get_run_logs(self, flow_run_id: str, limit: int = 200):
         return [f"log for {flow_run_id}"]
 
+    def list_deployments(self):
+        return list(self.deployments.values())
+
+    def delete_deployment(self, deployment_id: str):
+        for name, dep in list(self.deployments.items()):
+            if dep.get("id") == deployment_id:
+                del self.deployments[name]
+                return
+        raise RuntimeError(f"deployment {deployment_id} not found")
+
+    def pause_deployment(self, deployment_id: str):
+        for dep in self.deployments.values():
+            if dep.get("id") == deployment_id:
+                dep["paused"] = True
+                return
+        raise RuntimeError(f"deployment {deployment_id} not found")
+
+    def resume_deployment(self, deployment_id: str):
+        for dep in self.deployments.values():
+            if dep.get("id") == deployment_id:
+                dep["paused"] = False
+                return
+        raise RuntimeError(f"deployment {deployment_id} not found")
+
+    def list_flow_runs_for_deployment(self, deployment_id: str, limit: int = 50):
+        return [r for r in self.runs.values() if r.get("deployment_id") == deployment_id][:limit]
+
 
 class OperatorServiceTests(unittest.TestCase):
     def setUp(self):
@@ -201,6 +228,36 @@ class OperatorServiceTests(unittest.TestCase):
         self.assertTrue(response.removed_from_catalog)
         self.assertIsNone(self.store.get_template_by_name("ephemeral"))
         self.assertNotIn("ephemeral", catalog_path.read_text())
+
+
+    def test_delete_deployment_calls_adapter_and_returns_id(self):
+        response = self.service.delete_deployment("practice_101")
+        self.assertEqual(response.action, "deleted")
+        self.assertEqual(response.deployment_id, "dep-1")
+        self.assertEqual(response.deployment_name, "practice_101")
+        self.assertNotIn("practice_101", self.prefect.deployments)
+
+    def test_pause_and_resume_deployment(self):
+        paused = self.service.pause_deployment("practice_101")
+        self.assertEqual(paused.action, "paused")
+        self.assertTrue(self.prefect.deployments["practice_101"]["paused"])
+
+        resumed = self.service.resume_deployment("practice_101")
+        self.assertEqual(resumed.action, "resumed")
+        self.assertFalse(self.prefect.deployments["practice_101"]["paused"])
+
+    def test_list_runs_in_deployment_returns_runs_for_template(self):
+        self.service.submit_run("practice_101")
+        self.service.submit_run("practice_101")
+
+        response = self.service.list_runs_in_deployment("practice_101")
+
+        self.assertEqual(response.template_name, "practice_101")
+        self.assertEqual(response.deployment_id, "dep-1")
+        self.assertEqual(len(response.runs), 2)
+        for run in response.runs:
+            self.assertTrue(run.flow_run_id.startswith("run-"))
+            self.assertEqual(run.state, "Scheduled")
 
 
 if __name__ == "__main__":
