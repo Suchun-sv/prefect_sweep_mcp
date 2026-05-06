@@ -152,7 +152,7 @@ That starts the FastMCP server defined in `prefect_sweep_mcp/server.py`.
 One-shot install (interactive — prompts for missing values):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Suchun-sv/prefect_sweep_mcp/b92ec52/scripts/install_worker.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Suchun-sv/prefect_sweep_mcp/e950e78/scripts/install_worker.sh | bash
 ```
 
 Non-interactive — preset the values via env:
@@ -162,10 +162,10 @@ PREFECT_API_URL=http://your-prefect-host:4200/api \
 WORK_POOL=CPU_pool \
 WORK_QUEUE=practice \
 WORKER_LIMIT=1 \
-  bash <(curl -fsSL https://raw.githubusercontent.com/Suchun-sv/prefect_sweep_mcp/b92ec52/scripts/install_worker.sh)
+  bash <(curl -fsSL https://raw.githubusercontent.com/Suchun-sv/prefect_sweep_mcp/e950e78/scripts/install_worker.sh)
 ```
 
-> The URL pins commit `b92ec52` so `raw.githubusercontent.com`'s CDN serves the exact file immediately. The `main`-pinned URL works too but can be cached for several minutes after a push.
+> The URL pins commit `e950e78` so `raw.githubusercontent.com`'s CDN serves the exact file immediately. The `main`-pinned URL works too but can be cached for several minutes after a push.
 
 Variables read by the script:
 
