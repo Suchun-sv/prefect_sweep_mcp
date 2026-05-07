@@ -190,6 +190,22 @@ tmux kill-session -t prefect-worker-<timestamp>  # stop
 
 Requires `tmux` and `git` already installed on the host. `uv` is auto-installed if missing.
 
+### Per-run isolation and shared venv
+
+Every flow run clones the user repo fresh into `<repo_local_path>/.runs/<flow_run_id>/`. Concurrent runs therefore never share a working tree — no lock contention, no half-applied `git reset --hard`. On success the run dir is removed automatically.
+
+Python dependencies are installed once per repo into a **shared** venv at `<repo_local_path>/.venv-shared` and reused across runs. `uv sync` is filelocked so concurrent setups don't corrupt the env; the actual command then runs against the shared venv via `UV_PROJECT_ENVIRONMENT` / `VIRTUAL_ENV`.
+
+Implication for user code: the run dir is wiped on success, so write heavy artifacts (datasets, model weights, embedding caches) under stable shared locations like `~/.cache/dataset/`, `~/.cache/model/`, `$HF_HOME`, etc., rather than `./data` or `./models`.
+
+`install_worker.sh` also installs a daily cron that GCs failed/abandoned run dirs older than 1 day:
+
+```cron
+0 4 * * * RUNS_TTL_DAYS=1 RUNS_CLEANUP_ROOT="$HOME/github" ~/.prefect_sweep_mcp/scripts/cleanup_run_dirs.sh
+```
+
+Override `RUNS_CLEANUP_ROOT` or `RUNS_TTL_DAYS` by editing the crontab line if your repos live elsewhere or you want a different retention window.
+
 ## MCP Client Configuration
 
 An MCP client needs to launch the server as a local process.

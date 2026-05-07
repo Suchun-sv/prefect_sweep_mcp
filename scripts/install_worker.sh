@@ -127,6 +127,64 @@ ENV_FILE="$INSTALL_DIR/.env"
 chmod 600 "$ENV_FILE"
 echo "==> Wrote $ENV_FILE"
 
+# 4b. Best-effort: install daily cron to GC stale per-run worker dirs (>1 day).
+# Runs without sudo and is non-fatal — if the host has no crontab binary,
+# no writable user crontab, or no running cron daemon, we just print a manual
+# command the user can run periodically.
+install_cleanup_cron() {
+  local cleanup_script="$INSTALL_DIR/scripts/cleanup_run_dirs.sh"
+  if [[ ! -x "$cleanup_script" ]]; then
+    echo "==> [cron] Cleanup script missing at $cleanup_script — skipped"
+    return 1
+  fi
+  if ! command -v crontab >/dev/null 2>&1; then
+    echo "==> [cron] crontab not installed on this host — skipped"
+    return 1
+  fi
+
+  local cron_tag="# prefect-sweep-cleanup"
+  local cron_line="0 4 * * * RUNS_TTL_DAYS=1 RUNS_CLEANUP_ROOT=\"\$HOME/github\" $cleanup_script $cron_tag"
+
+  local existing
+  if ! existing="$(crontab -l 2>/dev/null)"; then
+    # crontab -l returns non-zero when no crontab exists — that's fine, treat as empty.
+    existing=""
+  fi
+
+  if grep -qF "$cron_tag" <<<"$existing"; then
+    echo "==> [cron] Cleanup cron already installed (tag: $cron_tag)"
+    return 0
+  fi
+
+  if printf '%s\n%s\n' "$existing" "$cron_line" | sed '/^$/d' | crontab - 2>/dev/null; then
+    echo "==> [cron] Installed daily cleanup cron: $cron_line"
+  else
+    echo "==> [cron] Could not write to user crontab on this host — skipped" >&2
+    return 1
+  fi
+
+  # Warn (non-fatal) if the cron daemon doesn't appear to be running.
+  if ! pgrep -x cron >/dev/null 2>&1 \
+     && ! pgrep -x crond >/dev/null 2>&1 \
+     && ! { command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet cron 2>/dev/null; } \
+     && ! { command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet crond 2>/dev/null; }; then
+    cat >&2 <<EOF
+==> [cron] WARNING: a cron daemon does not appear to be running on this host.
+    The crontab entry was written but it will not fire until cron is started
+    (e.g. \`service cron start\` / \`systemctl start cron\` — may need root).
+EOF
+  fi
+  return 0
+}
+
+if ! install_cleanup_cron; then
+  cat <<EOF
+==> [cron] Automatic GC of stale .runs/<id>/ dirs is NOT enabled on this host.
+    Run this command yourself every so often to recover disk:
+      RUNS_TTL_DAYS=1 RUNS_CLEANUP_ROOT="\$HOME/github" $INSTALL_DIR/scripts/cleanup_run_dirs.sh
+EOF
+fi
+
 # 5. Start the worker inside a tmux session
 if ! command -v tmux >/dev/null 2>&1; then
   echo "ERROR: tmux is not installed. Install it (e.g. apt install tmux) and re-run." >&2

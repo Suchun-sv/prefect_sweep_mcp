@@ -1,4 +1,6 @@
 from prefect import flow, task
+import prefect.runtime
+import shutil
 import subprocess
 import sys
 import os
@@ -151,6 +153,11 @@ def setup_git_token(github_token: str) -> None:
     print("[setup_git_token] ~/.netrc configured")
 
 
+def _current_flow_run_id() -> str:
+    rid = prefect.runtime.flow_run.id
+    return rid or "adhoc"
+
+
 @task
 def setup_repository(
     repo_url: str,
@@ -161,60 +168,94 @@ def setup_repository(
     init_script: str = "init.sh",
 ) -> str:
     """
-    Clone or update the repo, checkout branch/commit, run init.sh.
-    All git operations are protected by a per-repo file lock.
+    Clone the repo fresh into <repo_path>/.runs/<flow_run_id>/, then checkout
+    branch/commit and run init.sh. Each flow run gets its own working tree so
+    concurrent runs cannot collide. Heavy artifacts (datasets, model weights,
+    HF caches) should be written by user code into shared locations like
+    ~/.cache/... rather than the run dir, since the run dir is removed on
+    success.
+    """
+    parent = Path(repo_path).expanduser().resolve()
+    parent.mkdir(parents=True, exist_ok=True)
+    run_dir = parent / ".runs" / _current_flow_run_id()
+    if run_dir.exists():
+        shutil.rmtree(run_dir)
+    run_dir.parent.mkdir(parents=True, exist_ok=True)
+
+    authed_url = _inject_token(repo_url, github_token or "")
+    env = os.environ.copy()
+
+    print(f"[setup_repository] Cloning into per-run dir: {run_dir}")
+    _clone(authed_url, str(run_dir), branch, env)
+
+    if commit:
+        _checkout_commit(str(run_dir), commit, env)
+    # branch was already passed to git clone; no extra checkout needed unless commit overrides
+
+    _run_init_script(str(run_dir), init_script, env)
+
+    print(f"[setup_repository] Done — {run_dir}")
+    return str(run_dir)
+
+
+def _shared_venv_path(run_dir: str) -> Path:
+    """Shared venv path for all runs of one repo: <repo_parent>/.venv-shared."""
+    rd = Path(run_dir).resolve()
+    # run_dir is <repo_parent>/.runs/<flow_run_id>; venv lives next to .runs.
+    return rd.parent.parent / ".venv-shared"
+
+
+@task
+def run_uv_sync(repo_path: str) -> str:
+    """
+    Install project dependencies into a venv shared across all runs of this
+    repo (UV_PROJECT_ENVIRONMENT). The shared venv lives at
+    <repo_parent>/.venv-shared and is filelocked during sync.
+    Returns the venv path so downstream tasks can export it.
     """
     _ensure_filelock()
     from filelock import FileLock
 
-    path_obj  = Path(repo_path).expanduser().resolve()
-    path_str  = str(path_obj)
-    lock_path = path_obj.parent / f".{path_obj.name}.lock"
-    authed_url = _inject_token(repo_url, github_token or "")
-    env = os.environ.copy()
-
-    print(f"[setup_repository] Waiting for lock: {lock_path}")
-    with FileLock(str(lock_path), timeout=600):
-        print("[setup_repository] Lock acquired")
-
-        if not path_obj.exists() or not (path_obj / ".git").exists():
-            path_obj.parent.mkdir(parents=True, exist_ok=True)
-            _clone(authed_url, path_str, branch, env)
-        elif branch or commit:
-            _fetch(path_str, env)
-
-        if branch or commit:
-            _clean(path_str, env)
-
-        if commit:
-            _checkout_commit(path_str, commit, env)
-        elif branch:
-            _checkout_branch(path_str, branch, env)
-
-        _run_init_script(path_str, init_script, env)
-
-    print(f"[setup_repository] Done — {path_str}")
-    return path_str
-
-
-@task
-def run_uv_sync(repo_path: str) -> None:
-    """Install project dependencies with uv sync."""
-    env = {**os.environ.copy(), "TZ": "Europe/London"}
+    venv_path = _shared_venv_path(repo_path)
+    venv_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = venv_path.with_suffix(".sync.lock")
+    env = {
+        **os.environ.copy(),
+        "TZ": "Europe/London",
+        "UV_PROJECT_ENVIRONMENT": str(venv_path),
+    }
     _run(
         "command -v uv || curl -LsSf https://astral.sh/uv/install.sh | sh",
         env=env, prefix="ensure uv",
     )
-    _run("uv sync", cwd=repo_path, env=env, prefix="uv sync")
+    print(f"[run_uv_sync] Waiting for sync lock: {lock_path}")
+    with FileLock(str(lock_path), timeout=1800):
+        print(f"[run_uv_sync] Lock acquired; syncing into {venv_path}")
+        _run("uv sync", cwd=repo_path, env=env, prefix="uv sync")
     print("[run_uv_sync] Done")
+    return str(venv_path)
 
 
 @task
-def run_command(repo_path: str, cmd: CommandType) -> Dict[str, Any]:
-    """Execute cmd inside the repo directory."""
+def run_command(repo_path: str, cmd: CommandType, venv_path: Optional[str] = None) -> Dict[str, Any]:
+    """Execute cmd inside the repo directory using the shared venv if provided."""
+    env = os.environ.copy()
+    if venv_path:
+        env["UV_PROJECT_ENVIRONMENT"] = venv_path
+        env["VIRTUAL_ENV"] = venv_path
+        env["PATH"] = f"{venv_path}/bin:{env.get('PATH', '')}"
     label = " ".join(cmd) if isinstance(cmd, list) else cmd
     print(f"[run_command] {label}")
-    return _run(cmd, cwd=repo_path, prefix="run")
+    return _run(cmd, cwd=repo_path, env=env, prefix="run")
+
+
+@task
+def cleanup_run_dir(run_dir: str) -> None:
+    """Remove the per-run working tree after a successful run."""
+    path = Path(run_dir).resolve()
+    if path.exists():
+        shutil.rmtree(path, ignore_errors=True)
+        print(f"[cleanup_run_dir] Removed {path}")
 
 
 @flow(name="setup-update-run-cmd-flow", log_prints=True)
@@ -238,15 +279,17 @@ def setup_update_run_cmd_flow(
         cmd:             Command to run — str uses shell=True, list uses shell=False
     """
     setup_git_token(github_token)
-    repo_path = setup_repository(
+    run_dir = setup_repository(
         repo_url,
         repo_local_path,
         branch=branch,
         commit=commit,
         github_token=github_token,
     )
-    run_uv_sync(repo_path)
-    return run_command(repo_path, cmd)
+    venv_path = run_uv_sync(run_dir)
+    result = run_command(run_dir, cmd, venv_path=venv_path)
+    cleanup_run_dir(run_dir)
+    return result
 
 
 if __name__ == "__main__":
