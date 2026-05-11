@@ -191,6 +191,31 @@ if ! command -v tmux >/dev/null 2>&1; then
   exit 1
 fi
 
+# 5a. Detect existing prefect-worker-* sessions and ask before adding another.
+# Each running worker enforces --limit independently, so leaving old sessions
+# alive multiplies effective concurrency (e.g. 3 workers x --limit 1 = 3 runs).
+mapfile -t EXISTING_SESSIONS < <(tmux ls 2>/dev/null | awk -F: '/^prefect-worker-/ {print $1}')
+if (( ${#EXISTING_SESSIONS[@]} > 0 )); then
+  echo "==> Found ${#EXISTING_SESSIONS[@]} existing prefect-worker tmux session(s):"
+  printf '      - %s\n' "${EXISTING_SESSIONS[@]}"
+  KILL_EXISTING="${KILL_EXISTING:-}"
+  if [[ -z "$KILL_EXISTING" ]]; then
+    read -r -p "Kill them before starting a new worker? [Y/n]: " KILL_EXISTING < "$TTY_IN" || true
+    KILL_EXISTING="${KILL_EXISTING:-Y}"
+  fi
+  case "$KILL_EXISTING" in
+    [Yy]*|"")
+      for s in "${EXISTING_SESSIONS[@]}"; do
+        tmux kill-session -t "$s" 2>/dev/null && echo "    killed: $s"
+      done
+      ;;
+    *)
+      echo "==> Leaving existing sessions running. Effective concurrency will be"
+      echo "    (#workers + 1) x --limit. Ctrl-C now to abort if that's not what you want."
+      ;;
+  esac
+fi
+
 export PREFECT_API_URL
 WORKER_ARGS=(--pool "$WORK_POOL" --limit "$WORKER_LIMIT")
 if [[ -n "${WORK_QUEUE:-}" ]]; then
