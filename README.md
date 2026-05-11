@@ -70,12 +70,30 @@ Restart your agent; it should now see the `prefect-sweep` tools (`list_templates
 First go to the Prefect UI and create the `work_pool` you want this worker to listen on. Then edit the env values below and run on a fresh worker host:
 
 ```bash
+GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
 PREFECT_API_URL=http://your-prefect-host:4200/api \
 WORK_POOL=CPU_pool \
 WORK_QUEUE=default \
 WORKER_LIMIT=1 \
   bash <(curl -fsSL https://raw.githubusercontent.com/Suchun-sv/prefect_sweep_mcp/5971427/scripts/install_worker.sh)
 ```
+
+### About `GITHUB_TOKEN`
+
+Strictly **optional** — leave it unset (or blank at the prompt) if every repo you'll run is public **and** the worker host already has an SSH key with access to this MCP repo. Provide one when:
+
+- A user repo you'll submit through the worker is private, or
+- A user repo's uv/pip transitive deps live in a private GitHub repo (e.g. `git+ssh://git@github.com/your-org/private-lib`), or
+- The worker host has no SSH key at all — without keys, even the public `git@github.com:Suchun-sv/prefect_sweep_mcp.git` clone fails.
+
+How to create one:
+
+1. Go to https://github.com/settings/tokens (or `/settings/personal-access-tokens` for fine-grained tokens).
+2. **Classic**: tick the `repo` scope.
+3. **Fine-grained**: scope to the specific private repo(s) you need, grant *Repository permissions → Contents: Read-only*.
+4. Copy the `ghp_…` (classic) or `github_pat_…` (fine-grained) value and paste it as `GITHUB_TOKEN` above.
+
+What the installer does with it: writes three `git config --global url.https://x-access-token:$TOKEN@github.com/.insteadOf` rules so every `git@github.com:` / `ssh:` / `git+ssh:` URL is transparently rewritten to HTTPS-with-token. uv, pip, and any other git-using tool then pick up the token without further config. The token is also persisted to `~/.prefect_sweep_mcp/.env` (chmod 600).
 
 The full installer reference — every env var, the cron, private-repo auth, tmux session management — is documented under [Bootstrap a Worker on a New Machine](#bootstrap-a-worker-on-a-new-machine) below.
 
