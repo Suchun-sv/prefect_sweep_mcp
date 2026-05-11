@@ -32,7 +32,40 @@ cloudflared tunnel --url http://localhost:4200
 
 Any other proxy you're comfortable with also works.
 
-## 2. Install on a worker machine
+## 2. Install on your own debug machine (agent-running machine)
+
+This is the box where your agent (Claude Code, Claude Desktop, etc.) runs. The MCP server runs here too — it's the agent's control plane.
+
+```bash
+git clone git@github.com:Suchun-sv/prefect_sweep_mcp.git
+cd prefect_sweep_mcp
+uv sync
+```
+
+Then point your MCP client at it. For Claude Code:
+
+```bash
+PREFECT_API_URL=http://your-prefect-host:4200/api \
+  claude mcp add prefect-sweep -- uv run --project "$PWD" python -m prefect_sweep_mcp.server
+```
+
+For other clients, add an `mcpServers` entry like:
+
+```json
+{
+  "mcpServers": {
+    "prefect-sweep": {
+      "command": "uv",
+      "args": ["run", "--project", "/absolute/path/to/prefect_sweep_mcp", "python", "-m", "prefect_sweep_mcp.server"],
+      "env": { "PREFECT_API_URL": "http://your-prefect-host:4200/api" }
+    }
+  }
+}
+```
+
+Restart your agent; it should now see the `prefect-sweep` tools (`list_templates`, `submit_run`, …). More client-config detail in [MCP Client Configuration](#mcp-client-configuration) below.
+
+## 3. Install on each remote worker machine
 
 First go to the Prefect UI and create the `work_pool` you want this worker to listen on. Then edit the env values below and run on a fresh worker host:
 
