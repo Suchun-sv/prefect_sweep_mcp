@@ -1,4 +1,54 @@
-# prefect_sweep_mcp
+# Prefect_Sweep_MCP
+
+Let your AI agent handles you large-scale multi-machine experiments.
+
+> ***One-sentence intuition:*** Treat each machine as a command-waiting agent: we submit `scripts` into a shared `queue`, and each worker acts as a consumer that executes one script, reports the result, and then fetches the next task.
+
+- Further explanation for `script` and `queue`
+    1. The scripts: I've prepared a git and uv based template for users to use, nearly fit for any ML experiments.
+    2. The queue: I'll use [Prefect](https://www.prefect.io/) as the foundational service.
+
+# Installation
+
+## 0. Install Prefect
+
+We prefer you install via Docker:
+
+```bash
+docker run -d -p 4200:4200 prefecthq/prefect:3-latest -- prefect server start --host 0.0.0.0
+```
+
+You can check more options at https://docs.prefect.io/v3/get-started/install
+
+## 1. Expose to public network (optional)
+
+This is not an essential step — just lets your remote workers reach the Prefect API.
+
+**[Recommended]** use cloudflared to publish your service:
+
+```bash
+cloudflared tunnel --url http://localhost:4200
+```
+
+Any other proxy you're comfortable with also works.
+
+## 2. Install on a worker machine
+
+First go to the Prefect UI and create the `work_pool` you want this worker to listen on. Then edit the env values below and run on a fresh worker host:
+
+```bash
+PREFECT_API_URL=http://your-prefect-host:4200/api \
+WORK_POOL=CPU_pool \
+WORK_QUEUE=default \
+WORKER_LIMIT=1 \
+  bash <(curl -fsSL https://raw.githubusercontent.com/Suchun-sv/prefect_sweep_mcp/5971427/scripts/install_worker.sh)
+```
+
+The full installer reference — every env var, the cron, private-repo auth, tmux session management — is documented under [Bootstrap a Worker on a New Machine](#bootstrap-a-worker-on-a-new-machine) below.
+
+---
+
+## About the MCP server
 
 `prefect_sweep_mcp` is a small MCP server that sits in front of a Prefect deployment and a local SQLite metadata store.
 
