@@ -78,7 +78,8 @@ WORKER_LIMIT=1 \
   bash <(curl -fsSL https://raw.githubusercontent.com/Suchun-sv/prefect_sweep_mcp/5971427/scripts/install_worker.sh)
 ```
 
-### About `GITHUB_TOKEN`
+<details>
+<summary><strong>About <code>GITHUB_TOKEN</code></strong> — when you need it, how to create one (click to expand)</summary>
 
 Strictly **optional** — leave it unset (or blank at the prompt) if every repo you'll run is public **and** the worker host already has an SSH key with access to this MCP repo. Provide one when:
 
@@ -95,7 +96,39 @@ How to create one:
 
 What the installer does with it: writes three `git config --global url.https://x-access-token:$TOKEN@github.com/.insteadOf` rules so every `git@github.com:` / `ssh:` / `git+ssh:` URL is transparently rewritten to HTTPS-with-token. uv, pip, and any other git-using tool then pick up the token without further config. The token is also persisted to `~/.prefect_sweep_mcp/.env` (chmod 600).
 
+</details>
+
 The full installer reference — every env var, the cron, private-repo auth, tmux session management — is documented under [Bootstrap a Worker on a New Machine](#bootstrap-a-worker-on-a-new-machine) below.
+
+# Quick start
+
+Once the agent sees the `prefect-sweep` tools, the typical flow is **register → deploy → test → sweep**. Talk to the agent in plain English; below are the moves it should make (you'll see the matching tool calls in your client).
+
+### 1. Point the agent at a target repo
+
+> "Register `git@github.com:your-org/your-experiment.git` as a template called `my_exp`. Use `CPU_pool` / `default`. The entry command is `uv run python train.py`."
+
+Behind the scenes the agent calls `register_template(name="my_exp", repo_url=..., work_pool=..., default_cmd=..., default_branch="main")` and `deploy_template("my_exp")`. The template (with any job_variables / env you mention) is also written back to `templates/catalog.yaml`, so it survives an MCP restart.
+
+### 2. Fire one test run
+
+> "Submit a single test run for `my_exp` and tail the last 50 log lines when it's done."
+
+The agent calls `submit_run("my_exp")`, then `get_run_status(flow_run_id)` and `get_run_logs(flow_run_id, tail=True)`. Use this loop to fix the template's `default_cmd`, env vars, or branch until one run is green.
+
+### 3. Sweep at scale
+
+Once one run works, ask the agent to fan out:
+
+> "Submit a batch of 100 shards for `my_exp` with `model=gte`, `dataset=quora`. Worker-id and total-workers should expand automatically."
+
+Behind the scenes: `submit_batch(template_name="my_exp", expected_shards=100, parameter_overrides={...})`. Each shard substitutes `{worker_id}` / `{total_workers}` into the template's `command_template`. Watch progress with `get_batch_status(batch_id)`, retry just the failed ones with `retry_failed_shards(batch_id)`, or stop everything with `cancel_batch(batch_id)`.
+
+### A few things to know
+
+- **The run dir is wiped on success.** Tell user code to write heavy artifacts (datasets, model weights, HF caches) under `~/.cache/dataset/`, `~/.cache/model/`, `$HF_HOME`, etc. — *not* `./data` or `./models`. See [Per-run isolation and shared venv](#per-run-isolation-and-shared-venv).
+- **Per-run env**: set repo-wide env vars at `register_template(job_variables={"env": {"FOO": "bar"}})` time; they land in the deployment's `job_variables.env` and are exported into the user command.
+- **Concurrency**: each worker enforces `--limit` independently. Re-running `install_worker.sh` won't stack workers (it prompts first), but if you intentionally want N parallel runs, start N workers each with `WORKER_LIMIT=1`.
 
 ---
 
